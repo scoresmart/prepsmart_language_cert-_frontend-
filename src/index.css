@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LC portal: PrepSmart family (clean cards, shadcn) + distinct violet / serif accent */
+@layer base {
+  :root {
+    --background: 250 40% 98%;
+    --foreground: 260 25% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 260 25% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 260 25% 11%;
+
+    --primary: 258 55% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 258 20% 94%;
+    --secondary-foreground: 260 25% 18%;
+
+    --muted: 258 14% 93%;
+    --muted-foreground: 260 8% 40%;
+
+    --accent: 168 55% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 258 16% 90%;
+    --input: 258 16% 90%;
+    --ring: 258 55% 48%;
+
+    --radius: 0.85rem;
+
+    --sidebar-background: 260 30% 99%;
+    --sidebar-foreground: 260 15% 28%;
+    --sidebar-primary: 258 55% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 258 18% 94%;
+    --sidebar-accent-foreground: 260 25% 18%;
+    --sidebar-border: 258 14% 90%;
+    --sidebar-ring: 258 55% 48%;
+  }
+
+  .dark {
+    --background: 260 28% 8%;
+    --foreground: 258 20% 96%;
+
+    --card: 260 26% 11%;
+    --card-foreground: 258 20% 96%;
+
+    --popover: 260 26% 11%;
+    --popover-foreground: 258 20% 96%;
+
+    --primary: 258 58% 62%;
+    --primary-foreground: 260 28% 8%;
+
+    --secondary: 260 18% 16%;
+    --secondary-foreground: 258 20% 96%;
+
+    --muted: 260 18% 16%;
+    --muted-foreground: 258 12% 65%;
+
+    --accent: 168 45% 42%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 260 16% 18%;
+    --input: 260 16% 18%;
+    --ring: 258 58% 62%;
+
+    --sidebar-background: 260 28% 10%;
+    --sidebar-foreground: 258 15% 92%;
+    --sidebar-primary: 258 58% 62%;
+    --sidebar-primary-foreground: 260 28% 8%;
+    --sidebar-accent: 260 18% 16%;
+    --sidebar-accent-foreground: 258 20% 96%;
+    --sidebar-border: 260 16% 18%;
+    --sidebar-ring: 258 58% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
