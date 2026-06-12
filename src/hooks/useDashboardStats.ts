@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase/client";
 import type { LcAttempt, LcSubscription, LcUserProfile } from "@/types/lc";
 import { pickAccessibleSubscription } from "@/lib/subscription";
 
+import { isRecoverableDbError } from "@/lib/supabase/errors";
+
 export function useDashboardStats(userId: string | undefined, profile: LcUserProfile | null) {
   return useQuery({
     queryKey: ["lc", "dashboard", userId, profile?.exam_date],
@@ -30,13 +32,22 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
           .eq("is_published", true),
       ]);
 
-      if (subsRes.error) throw subsRes.error;
-      if (attemptsRes.error) throw attemptsRes.error;
-      if (dialogueCountRes.error) throw dialogueCountRes.error;
-      if (rapidCountRes.error) throw rapidCountRes.error;
+      const errors = [subsRes.error, attemptsRes.error, dialogueCountRes.error, rapidCountRes.error].filter(Boolean);
+      const fatal = errors.find((e) => !isRecoverableDbError(e));
+      if (fatal) throw fatal;
 
-      const subscriptions = (subsRes.data ?? []) as LcSubscription[];
-      const attempts = (attemptsRes.data ?? []) as Pick<LcAttempt, "id" | "question_type" | "score" | "max_score" | "completed_at">[];
+      if (errors.length) {
+        console.warn(
+          "[PrepSmart LC] Dashboard tables not found. Run the LC migration in Supabase or set VITE_SUPABASE_DB_SCHEMA=lc after exposing the lc schema.",
+          errors,
+        );
+      }
+
+      const subscriptions = (subsRes.error ? [] : (subsRes.data ?? [])) as LcSubscription[];
+      const attempts = (attemptsRes.error ? [] : (attemptsRes.data ?? [])) as Pick<
+        LcAttempt,
+        "id" | "question_type" | "score" | "max_score" | "completed_at"
+      >[];
 
       const today = startOfDay(new Date());
       const todayAttempts = attempts.filter((a) => a.score != null && isSameDay(new Date(a.completed_at), today));
@@ -66,8 +77,8 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
 
       const dialogueDone = attempts.filter((a) => a.question_type === "dialogue").length;
       const rapidDone = attempts.filter((a) => a.question_type === "rapid_review").length;
-      const dialogueAvail = dialogueCountRes.count ?? 0;
-      const rapidAvail = rapidCountRes.count ?? 0;
+      const dialogueAvail = dialogueCountRes.error ? 0 : (dialogueCountRes.count ?? 0);
+      const rapidAvail = rapidCountRes.error ? 0 : (rapidCountRes.count ?? 0);
 
       const activeSub = pickAccessibleSubscription(subscriptions);
       let daysUntilExam: number | null = null;

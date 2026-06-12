@@ -1,0 +1,158 @@
+import { CalendarDays, Flame, Info, Target, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Skeleton } from "@/components/ui/skeleton";
+import { LCPracticeDropdown } from "@/components/layout/LCPracticeDropdown";
+
+type Props = {
+  username: string;
+  studyStreak: number;
+  questionsDone: number;
+  daysToExam: number | null;
+  loading?: boolean;
+  targetLevel?: string;
+};
+
+function TargetRings({ level }: { level: string }) {
+  const bands = [8, 7, 6, 5, 4, 3];
+  const labels = ["C1", "B2", "B1", "A2", "A1", ""];
+  const colors = ["#fde047", "#84cc16", "#eab308", "#f97316", "#ef4444", "#8b5cf6"];
+  const sizes = [100, 88, 76, 64, 52, 40];
+
+  return (
+    <div className="relative flex h-36 w-36 items-center justify-center animate-float-slow">
+      {bands.map((band, i) => (
+        <div
+          key={band}
+          className="absolute rounded-full border-2 transition-all duration-500"
+          style={{
+            width: sizes[i],
+            height: sizes[i],
+            borderColor: i === 1 ? colors[0] : `${colors[i]}55`,
+            backgroundColor: i === 1 ? `${colors[0]}18` : "transparent",
+            animationDelay: `${i * 0.1}s`,
+          }}
+        />
+      ))}
+      <div className="relative z-10 flex size-8 flex-col items-center justify-center">
+        <div
+          className="h-6 w-0.5 rounded-full bg-yellow-300 shadow-[0_0_8px_#fde047]"
+          style={{ transformOrigin: "bottom", transform: "rotate(-35deg)" }}
+        />
+      </div>
+      {bands.map((band, i) => (
+        <span
+          key={`label-${band}`}
+          className="absolute text-[9px] font-bold text-white/90"
+          style={{
+            top: `calc(50% - ${sizes[i] / 2}px - 4px)`,
+            left: "50%",
+            transform: "translateX(-50%)",
+          }}
+        >
+          {labels[i]}
+        </span>
+      ))}
+      <div className="absolute -bottom-1 flex items-center gap-1 rounded-full border border-yellow-400/40 bg-yellow-400/15 px-2.5 py-1 backdrop-blur-sm">
+        <Target className="size-2.5 text-yellow-300" />
+        <span className="text-[10px] font-bold text-yellow-200">{level}</span>
+        <Info className="size-2.5 text-yellow-300/70" />
+      </div>
+    </div>
+  );
+}
+
+export function WelcomeBanner({
+  username,
+  studyStreak,
+  questionsDone,
+  daysToExam,
+  loading,
+  targetLevel = "B2 Level",
+}: Props) {
+  return (
+    <div className="group relative overflow-hidden rounded-3xl p-6 text-white shadow-2xl shadow-emerald-900/30 md:p-8">
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "linear-gradient(135deg, #48c6ef 0%, #0e9f73 35%, #0d7d5b 65%, #1a5276 100%)",
+        }}
+      />
+      <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-white/10 blur-2xl animate-float-slow" />
+      <div className="pointer-events-none absolute -bottom-20 left-1/3 size-40 rounded-full bg-cyan-300/20 blur-3xl animate-float-delayed" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent_50%)]" />
+
+      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1 space-y-4">
+          <div className="inline-flex animate-fade-in-up items-center gap-2 rounded-full border border-white/25 bg-white/15 px-4 py-1.5 text-xs font-semibold backdrop-blur-md">
+            <span className="animate-pulse">✨</span> Welcome back!
+          </div>
+
+          <div className="animate-fade-in-up" style={{ animationDelay: "80ms" }}>
+            <p className="font-display text-lg text-white/90">
+              Hi {username}, <span className="inline-block animate-wave">👋</span>
+            </p>
+            <h1 className="mt-1 font-display text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">
+              Let&apos;s Target{" "}
+              <span className="bg-gradient-to-r from-yellow-200 via-yellow-400 to-amber-300 bg-clip-text text-transparent drop-shadow-sm">
+                {targetLevel}
+              </span>
+            </h1>
+          </div>
+
+          <button
+            type="button"
+            className="animate-fade-in-up flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur-md transition-all duration-300 hover:scale-105 hover:bg-white/20 active:scale-95"
+            style={{ animationDelay: "160ms" }}
+          >
+            <Target className="size-4" />
+            Set Target Score
+          </button>
+
+          <div className="flex flex-wrap gap-3 animate-fade-in-up" style={{ animationDelay: "240ms" }}>
+            {[
+              { icon: Flame, label: "Study Streak", value: `${studyStreak} Days`, color: "text-orange-200" },
+              { icon: Zap, label: "Questions Done", value: String(questionsDone), color: "text-yellow-200" },
+              { icon: CalendarDays, label: "Days to Exam", value: daysToExam != null ? `${Math.max(0, daysToExam)} Days` : null, color: "text-cyan-200" },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div
+                key={label}
+                className="flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/15 hover:shadow-lg"
+              >
+                <div className={`rounded-xl bg-white/10 p-2 ${color}`}>
+                  <Icon className="size-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-white/55">{label}</p>
+                  {loading && label === "Days to Exam" ? (
+                    <Skeleton className="mt-1 h-4 w-14 bg-white/20" />
+                  ) : value != null ? (
+                    <p className="text-sm font-bold">{value}</p>
+                  ) : (
+                    <Link to="/settings" className="text-sm font-bold underline underline-offset-2 hover:text-yellow-200">
+                      Set Date
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="animate-fade-in-up rounded-2xl border border-dashed border-white/25 bg-white/10 p-4 backdrop-blur-md sm:flex sm:items-center sm:justify-between sm:gap-4"
+            style={{ animationDelay: "320ms" }}
+          >
+            <div>
+              <p className="font-semibold">Start strong and stay consistent! 💪</p>
+              <p className="text-xs text-white/65">Practice Language Cert like a real exam with PrepSmart LC.</p>
+            </div>
+            <LCPracticeDropdown triggerVariant="cta" align="left" className="mt-3 shrink-0 sm:mt-0" />
+          </div>
+        </div>
+
+        <div className="hidden shrink-0 lg:block animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+          <TargetRings level={targetLevel} />
+        </div>
+      </div>
+    </div>
+  );
+}

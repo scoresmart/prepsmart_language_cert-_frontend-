@@ -1,86 +1,286 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FileText, Search } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
+import { api, type MockTest, type ListeningQuestion, type WritingQuestion } from "@/lib/api";
 
-type MockTest = {
-  id: string;
-  title: string;
-  status: string;
-  duration_minutes: number;
-  is_published: boolean;
-  created_at: string;
-  description?: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+// The API's MockTest type doesn't include the question-ID columns, so we extend
+// it locally to represent the full row returned from the backend.
+type FullMockTest = MockTest & {
+  listening_part1_id: string | null;
+  listening_part2_id: string | null;
+  listening_part3_id: string | null;
+  listening_part4_id: string | null;
+  reading_part1a_id: string | null;
+  reading_part1b_id: string | null;
+  reading_part2_id: string | null;
+  reading_part3_id: string | null;
+  reading_part4_id: string | null;
+  writing_task1_id: string | null;
+  writing_task2_id: string | null;
 };
 
-type FormData = { title: string; status: string; duration_minutes: number; is_published: boolean; description: string; };
-const emptyForm: FormData = { title: "", status: "draft", duration_minutes: 120, is_published: false, description: "" };
+type AssemblyForm = {
+  title: string;
+  is_active: boolean;
+  listening_part1_id: string;
+  listening_part2_id: string;
+  listening_part3_id: string;
+  listening_part4_id: string;
+  reading_part1a_id: string;
+  reading_part1b_id: string;
+  reading_part2_id: string;
+  reading_part3_id: string;
+  reading_part4_id: string;
+  writing_task1_id: string;
+  writing_task2_id: string;
+};
+
+const emptyForm: AssemblyForm = {
+  title: "",
+  is_active: true,
+  listening_part1_id: "",
+  listening_part2_id: "",
+  listening_part3_id: "",
+  listening_part4_id: "",
+  reading_part1a_id: "",
+  reading_part1b_id: "",
+  reading_part2_id: "",
+  reading_part3_id: "",
+  reading_part4_id: "",
+  writing_task1_id: "",
+  writing_task2_id: "",
+};
+
+// Count of non-null IDs in a full test row
+function filledCount(row: FullMockTest): number {
+  const keys: (keyof FullMockTest)[] = [
+    "listening_part1_id",
+    "listening_part2_id",
+    "listening_part3_id",
+    "listening_part4_id",
+    "reading_part1a_id",
+    "reading_part1b_id",
+    "reading_part2_id",
+    "reading_part3_id",
+    "reading_part4_id",
+    "writing_task1_id",
+    "writing_task2_id",
+  ];
+  return keys.filter((k) => row[k] != null && row[k] !== "").length;
+}
+
+// ─── Select helper ────────────────────────────────────────────────────────────
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  loading,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; display: string }[];
+  loading?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loading}
+        className="text-sm"
+      >
+        <option value="">— None —</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.display}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export function AdminMockTestsPage() {
   const qc = useQueryClient();
-  const [search, setSearch] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editRow, setEditRow] = React.useState<MockTest | null>(null);
-  const [form, setForm] = React.useState<FormData>(emptyForm);
+  const [editRow, setEditRow] = React.useState<FullMockTest | null>(null);
+  const [form, setForm] = React.useState<AssemblyForm>(emptyForm);
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
 
-  const q = useQuery({
+  // ── Data fetching ──
+
+  const testsQuery = useQuery({
     queryKey: ["admin", "mock-tests"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mock_tests")
-        .select("id,title,status,duration_minutes,is_published,created_at,description")
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return (data ?? []) as MockTest[];
+      const res = await api.tests.list();
+      return (res.data?.tests ?? []) as FullMockTest[];
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: FormData & { id?: string }) => {
-      const payload = { title: data.title, status: data.status, duration_minutes: data.duration_minutes, is_published: data.is_published, description: data.description || null };
-      if (data.id) {
-        const { error } = await supabase.from("mock_tests").update(payload).eq("id", data.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("mock_tests").insert(payload);
-        if (error) throw error;
-      }
+  const listeningQuery = useQuery({
+    queryKey: ["admin", "lq-all"],
+    queryFn: () => api.listening.list(),
+  });
+
+  const writingQuery = useQuery({
+    queryKey: ["admin", "wq-all"],
+    queryFn: () => api.writing.list(),
+  });
+
+  const tests = testsQuery.data ?? [];
+
+  // All listening questions from the paginated response
+  const allListening: ListeningQuestion[] =
+    (listeningQuery.data?.data?.questions as ListeningQuestion[] | undefined) ?? [];
+
+  // All writing/reading questions
+  const allWriting: WritingQuestion[] =
+    (writingQuery.data?.data as WritingQuestion[] | undefined) ?? [];
+
+  // Listening filtered by part_number
+  const lPart = (n: number) =>
+    allListening
+      .filter((q) => q.part_number === n)
+      .map((q) => ({
+        id: q.id,
+        display: q.audio_path ? q.audio_path : `[${q.id.slice(0, 8)}]`,
+      }));
+
+  // Writing filtered by task_type (cast needed because API types it narrowly)
+  const wByType = (type: string) =>
+    allWriting
+      .filter((q) => (q.task_type as string) === type)
+      .map((q) => ({
+        id: q.id,
+        display: q.question_text ? q.question_text.slice(0, 50) : `[${q.id.slice(0, 8)}]`,
+      }));
+
+  // ── Mutations ──
+
+  const createMutation = useMutation({
+    mutationFn: (f: AssemblyForm) =>
+      api.tests.create({ title: f.title } as Parameters<typeof api.tests.create>[0]),
+    onSuccess: async (res) => {
+      // After create, immediately patch in the question IDs
+      const id = (res.data as MockTest).id;
+      await api.tests.update(id, buildUpdatePayload(form) as Parameters<typeof api.tests.update>[1]);
+      qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      closeDialog();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] }); setDialogOpen(false); setEditRow(null); setForm(emptyForm); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, f }: { id: string; f: AssemblyForm }) =>
+      api.tests.update(id, buildUpdatePayload(f) as Parameters<typeof api.tests.update>[1]),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      closeDialog();
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("mock_tests").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] }); setDeleteId(null); },
+    mutationFn: (id: string) => api.tests.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      setDeleteId(null);
+    },
   });
 
-  const togglePublish = useMutation({
-    mutationFn: async ({ id, val }: { id: string; val: boolean }) => { const { error } = await supabase.from("mock_tests").update({ is_published: val }).eq("id", id); if (error) throw error; },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] }),
-  });
+  // Build the full payload, converting empty strings to null for optional IDs
+  function buildUpdatePayload(f: AssemblyForm) {
+    const nullify = (v: string) => v || null;
+    return {
+      title: f.title,
+      is_active: f.is_active,
+      listening_part1_id: nullify(f.listening_part1_id),
+      listening_part2_id: nullify(f.listening_part2_id),
+      listening_part3_id: nullify(f.listening_part3_id),
+      listening_part4_id: nullify(f.listening_part4_id),
+      reading_part1a_id: nullify(f.reading_part1a_id),
+      reading_part1b_id: nullify(f.reading_part1b_id),
+      reading_part2_id: nullify(f.reading_part2_id),
+      reading_part3_id: nullify(f.reading_part3_id),
+      reading_part4_id: nullify(f.reading_part4_id),
+      writing_task1_id: nullify(f.writing_task1_id),
+      writing_task2_id: nullify(f.writing_task2_id),
+    };
+  }
 
-  const openAdd = () => { setEditRow(null); setForm(emptyForm); setDialogOpen(true); };
-  const openEdit = (row: MockTest) => {
-    setEditRow(row);
-    setForm({ title: row.title, status: row.status, duration_minutes: row.duration_minutes, is_published: row.is_published, description: row.description ?? "" });
+  // ── Dialog helpers ──
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditRow(null);
+    setForm(emptyForm);
+  };
+
+  const openAdd = () => {
+    setEditRow(null);
+    setForm(emptyForm);
     setDialogOpen(true);
   };
 
-  const filtered = (q.data ?? []).filter((r) => !search || r.title.toLowerCase().includes(search.toLowerCase()));
+  const openEdit = (row: FullMockTest) => {
+    setEditRow(row);
+    setForm({
+      title: row.title,
+      is_active: row.is_active,
+      listening_part1_id: row.listening_part1_id ?? "",
+      listening_part2_id: row.listening_part2_id ?? "",
+      listening_part3_id: row.listening_part3_id ?? "",
+      listening_part4_id: row.listening_part4_id ?? "",
+      reading_part1a_id: row.reading_part1a_id ?? "",
+      reading_part1b_id: row.reading_part1b_id ?? "",
+      reading_part2_id: row.reading_part2_id ?? "",
+      reading_part3_id: row.reading_part3_id ?? "",
+      reading_part4_id: row.reading_part4_id ?? "",
+      writing_task1_id: row.writing_task1_id ?? "",
+      writing_task2_id: row.writing_task2_id ?? "",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (editRow) {
+      updateMutation.mutate({ id: editRow.id, f: form });
+    } else {
+      createMutation.mutate(form);
+    }
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  // ── Field updater shorthand ──
+  const setField =
+    <K extends keyof AssemblyForm>(key: K) =>
+    (value: AssemblyForm[K]) =>
+      setForm((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500">
@@ -88,59 +288,299 @@ export function AdminMockTestsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">Mock Tests</h1>
-            <p className="text-sm text-slate-500">{q.data?.length ?? 0} tests total</p>
+            <p className="text-sm text-slate-500">Manage language_cert_mock_tests</p>
           </div>
         </div>
-        <Button onClick={openAdd} className="gap-2"><Plus className="size-4" />Create Mock Test</Button>
+        <Button onClick={openAdd} className="gap-2">
+          <Plus className="size-4" />
+          Create Mock Test
+        </Button>
       </div>
+
+      {/* Stat card */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="border-0 bg-white shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Total Mock Tests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-3xl font-bold text-slate-800">{tests.length}</span>
+          </CardContent>
+        </Card>
+        <Card className="border-0 bg-white shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Active
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-3xl font-bold text-green-600">
+              {tests.filter((t) => t.is_active).length}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="border-0 bg-white shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Fully Assembled
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-3xl font-bold text-indigo-600">
+              {tests.filter((t) => filledCount(t) === 11).length}
+            </span>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tests table */}
       <Card className="border-0 bg-white shadow-sm">
-        <CardContent className="p-4">
-          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" /><Input placeholder="Search tests..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-        </CardContent>
-      </Card>
-      <Card className="border-0 bg-white shadow-sm">
-        <CardHeader className="border-b px-5 py-4"><CardTitle className="text-sm font-semibold text-slate-600">{filtered.length} mock test{filtered.length !== 1 ? "s" : ""}</CardTitle></CardHeader>
+        <CardHeader className="border-b px-5 py-4">
+          <CardTitle className="text-sm font-semibold text-slate-600">
+            {tests.length} mock test{tests.length !== 1 ? "s" : ""}
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
-          {q.isLoading ? <div className="p-8 text-center text-sm text-slate-400">Loading…</div> : filtered.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">No mock tests yet.</div> : (
+          {testsQuery.isLoading ? (
+            <div className="p-8 text-center text-sm text-slate-400">Loading…</div>
+          ) : testsQuery.isError ? (
+            <div className="p-8 text-center text-sm text-red-500">Failed to load mock tests.</div>
+          ) : tests.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-400">No mock tests yet.</div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="border-b bg-slate-50 text-left"><th className="px-5 py-3 font-medium text-slate-500">Title</th><th className="px-4 py-3 font-medium text-slate-500">Status</th><th className="px-4 py-3 font-medium text-slate-500">Duration</th><th className="px-4 py-3 font-medium text-slate-500">Published</th><th className="px-4 py-3 font-medium text-slate-500">Actions</th></tr></thead>
+                <thead>
+                  <tr className="border-b bg-slate-50 text-left">
+                    <th className="px-5 py-3 font-medium text-slate-500">Title</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Sections</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Active</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Created</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Actions</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filtered.map((row) => (
-                    <tr key={row.id} className="border-b last:border-0 hover:bg-slate-50/50">
-                      <td className="px-5 py-3 font-medium text-slate-700">{row.title}</td>
-                      <td className="px-4 py-3"><Badge variant={row.status === "published" ? "default" : "secondary"}>{row.status}</Badge></td>
-                      <td className="px-4 py-3 text-slate-600">{row.duration_minutes} min</td>
-                      <td className="px-4 py-3"><Switch checked={row.is_published} onCheckedChange={(val) => togglePublish.mutate({ id: row.id, val })} /></td>
-                      <td className="px-4 py-3"><div className="flex gap-2"><button onClick={() => openEdit(row)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="size-3.5" /></button><button onClick={() => setDeleteId(row.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-3.5" /></button></div></td>
-                    </tr>
-                  ))}
+                  {tests.map((row) => {
+                    const filled = filledCount(row);
+                    return (
+                      <tr key={row.id} className="border-b last:border-0 hover:bg-slate-50/50">
+                        <td className="px-5 py-3 font-medium text-slate-700">{row.title}</td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant={filled === 11 ? "default" : "secondary"}
+                            className="tabular-nums"
+                          >
+                            {filled} / 11
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={row.is_active ? "default" : "secondary"}>
+                            {row.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">
+                          {new Date(row.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                              title="Edit"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteId(row.id)}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                              title="Delete"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </CardContent>
       </Card>
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editRow ? "Edit Mock Test" : "Create Mock Test"}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5"><Label>Title *</Label><Input placeholder="Mock Test title..." value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Status</Label><Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></Select></div>
-              <div className="space-y-1.5"><Label>Duration (min)</Label><Input type="number" min={1} value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: parseInt(e.target.value) || 120 })} /></div>
+
+      {/* Create / Edit dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editRow ? "Edit Mock Test" : "Create Mock Test"}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 py-2">
+            {/* Basic Info */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Basic Info
+              </h3>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Title *</Label>
+                  <Input
+                    placeholder="e.g. Mock Test 1"
+                    value={form.title}
+                    onChange={(e) => setField("title")(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={form.is_active}
+                    onCheckedChange={(val) => setField("is_active")(val)}
+                  />
+                  <Label>Active</Label>
+                </div>
+              </div>
             </div>
-            <div className="space-y-1.5"><Label>Description</Label><Textarea placeholder="Test description..." rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-            <div className="flex items-center gap-3"><Switch checked={form.is_published} onCheckedChange={(val) => setForm({ ...form, is_published: val })} /><Label>Published</Label></div>
+
+            {/* Listening */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Listening
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <SelectField
+                  label="Part 1 – Short Exchanges"
+                  value={form.listening_part1_id}
+                  onChange={setField("listening_part1_id")}
+                  options={lPart(1)}
+                  loading={listeningQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 2 – Conversations"
+                  value={form.listening_part2_id}
+                  onChange={setField("listening_part2_id")}
+                  options={lPart(2)}
+                  loading={listeningQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 3 – Note Completion"
+                  value={form.listening_part3_id}
+                  onChange={setField("listening_part3_id")}
+                  options={lPart(3)}
+                  loading={listeningQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 4 – Extended Discussion"
+                  value={form.listening_part4_id}
+                  onChange={setField("listening_part4_id")}
+                  options={lPart(4)}
+                  loading={listeningQuery.isLoading}
+                />
+              </div>
+            </div>
+
+            {/* Reading */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Reading
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <SelectField
+                  label="Part 1A"
+                  value={form.reading_part1a_id}
+                  onChange={setField("reading_part1a_id")}
+                  options={wByType("reading_part_1a")}
+                  loading={writingQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 1B"
+                  value={form.reading_part1b_id}
+                  onChange={setField("reading_part1b_id")}
+                  options={wByType("reading_part_1b")}
+                  loading={writingQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 2"
+                  value={form.reading_part2_id}
+                  onChange={setField("reading_part2_id")}
+                  options={wByType("reading_part_2")}
+                  loading={writingQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 3"
+                  value={form.reading_part3_id}
+                  onChange={setField("reading_part3_id")}
+                  options={wByType("reading_part_3")}
+                  loading={writingQuery.isLoading}
+                />
+                <SelectField
+                  label="Part 4"
+                  value={form.reading_part4_id}
+                  onChange={setField("reading_part4_id")}
+                  options={wByType("reading_part_4")}
+                  loading={writingQuery.isLoading}
+                />
+              </div>
+            </div>
+
+            {/* Writing */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Writing
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <SelectField
+                  label="Task 1"
+                  value={form.writing_task1_id}
+                  onChange={setField("writing_task1_id")}
+                  options={wByType("task1")}
+                  loading={writingQuery.isLoading}
+                />
+                <SelectField
+                  label="Task 2"
+                  value={form.writing_task2_id}
+                  onChange={setField("writing_task2_id")}
+                  options={wByType("task2")}
+                  loading={writingQuery.isLoading}
+                />
+              </div>
+            </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate({ ...form, id: editRow?.id })} disabled={!form.title || saveMutation.isPending}>{saveMutation.isPending ? "Saving…" : editRow ? "Save" : "Create"}</Button>
+            <Button variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!form.title.trim() || isSaving}>
+              {isSaving ? "Saving…" : editRow ? "Save Changes" : "Create Mock Test"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="max-w-sm"><DialogHeader><DialogTitle>Delete Mock Test?</DialogTitle></DialogHeader><p className="text-sm text-slate-500">This will permanently remove the test and all associated data.</p><DialogFooter><Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button><Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>{deleteMutation.isPending ? "Deleting…" : "Delete"}</Button></DialogFooter></DialogContent>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Mock Test?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            This will deactivate the test. The action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

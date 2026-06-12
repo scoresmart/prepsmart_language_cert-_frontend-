@@ -86,28 +86,25 @@ export function SignupPage() {
         {/* Left branding */}
         <div className="hidden lg:flex flex-col gap-6 flex-1">
           <div className="flex items-center gap-3 mb-2">
-            <img src="/logo.svg" className="h-10 w-10 rounded-xl" alt="PrepSmart LC" />
-            <span className="text-white font-bold text-lg tracking-wide">PREP<span className="text-[#00d4d4]">SMART</span> <span className="text-white/70 font-medium">LC</span></span>
+            <img src="/logo.png" className="h-10 w-10 object-contain" alt="PrepSmart LC" />
+            <span className="text-white font-bold text-lg tracking-wide">PREP<span className="text-[#00d4d4]">SMART</span> <span className="text-[#00d4d4] font-extrabold">LC</span></span>
           </div>
 
           <div
-            className="flex h-32 w-32 items-center justify-center rounded-3xl mb-4"
+            className="mb-6 flex h-36 w-36 items-center justify-center"
             style={{
-              background: "linear-gradient(135deg, #0a1628 0%, #0d2040 100%)",
-              border: "2px solid rgba(0,200,200,0.35)",
-              boxShadow: "0 0 40px rgba(0,180,200,0.3), 0 0 80px rgba(0,120,180,0.15)",
+              filter: "drop-shadow(0 0 24px rgba(0,200,200,0.45)) drop-shadow(0 0 48px rgba(0,120,180,0.2))",
             }}
           >
-            <img src="/logo.svg" className="h-20 w-20 rounded-2xl" alt="PrepSmart LC" />
+            <img src="/logo.png" className="h-36 w-36 object-contain" alt="PrepSmart LC" />
           </div>
 
           <h1 className="text-5xl font-extrabold leading-tight text-white">
-            Join<br />
-            PrepSmart <span className="text-[#00d4d4]">LC</span><br />
+            Join PrepSmart <span className="text-[#00d4d4]">LC</span><br />
             Today
           </h1>
           <p className="text-[#7ab8c8] text-base max-w-sm">
-            Create your free account and start mastering LanguageCert with AI-powered practice sessions.
+            Practice Language Cert like a real exam — create your free account and start mastering LanguageCert with AI-powered practice sessions.
           </p>
         </div>
 
@@ -116,11 +113,11 @@ export function SignupPage() {
           <div className="rounded-2xl bg-white px-8 py-8 shadow-2xl">
             {/* Logo */}
             <div className="flex flex-col items-center mb-5">
-              <img src="/logo.svg" className="h-14 w-14 rounded-2xl shadow-md mb-3" alt="PrepSmart LC" />
+              <img src="/logo.png" className="mb-3 h-16 w-16 object-contain" alt="PrepSmart LC" />
               <h2 className="text-xl font-bold text-gray-900">
                 Create <span className="text-[#00b8b8]">Account</span>
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">PrepSmart LC — LanguageCert Practice Portal</p>
+              <p className="text-xs text-gray-400 mt-0.5">PrepSmart LC — Practice Language Cert like a real exam</p>
             </div>
 
             <form className="space-y-3.5" onSubmit={onSubmit}>

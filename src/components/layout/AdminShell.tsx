@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Mic, BookOpen, PenLine, Headphones, FileText,
   ClipboardList, BarChart2, Users, Layers, Lock, Megaphone, BookMarked,
   CreditCard, Tag, Link2, Brain, MessageSquareText, History, PieChart,
-  Upload, LogOut, ChevronRight, FlaskConical, Bot, User,
+  Upload, LogOut, ChevronRight, FlaskConical, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthContext";
@@ -80,9 +80,7 @@ export function AdminShell() {
       {/* Sidebar */}
       <aside className="hidden w-[200px] shrink-0 flex-col bg-[#1a1a2e] md:flex">
         <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Bot className="size-4 text-white" />
-          </div>
+          <img src="/logo.png" alt="PrepSmart LC" className="h-8 w-8 object-contain" />
           <div>
             <p className="text-[13px] font-semibold text-white">Admin Panel</p>
             <p className="text-[11px] text-slate-400">Score Smart</p>
@@ -123,7 +121,7 @@ export function AdminShell() {
       {/* Main */}
       <div className="flex flex-1 flex-col min-w-0">
         <div className="flex items-center gap-3 border-b bg-[#1a1a2e] px-4 py-3 md:hidden">
-          <Bot className="size-5 text-primary" />
+          <img src="/logo.png" alt="PrepSmart LC" className="h-8 w-8 object-contain" />
           <span className="text-sm font-semibold text-white">Admin Panel</span>
         </div>
         <main className="flex-1 overflow-auto bg-slate-50 p-6">

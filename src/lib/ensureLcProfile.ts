@@ -1,12 +1,19 @@
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
+import { isRecoverableDbError } from "@/lib/supabase/errors";
 
 const ADMIN_EMAILS = ["contact@scoresmartpte.com"];
 
-/** Create `lc.user_profiles` row on first LC login (avoids LMS-wide auth triggers). */
+/** Create user_profiles row on first LC login (avoids LMS-wide auth triggers). */
 export async function ensureLcProfile(user: User): Promise<void> {
   const { data, error } = await supabase.from("user_profiles").select("id, role").eq("id", user.id).maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isRecoverableDbError(error)) {
+      console.warn("[PrepSmart LC] user_profiles not available yet:", error);
+      return;
+    }
+    throw error;
+  }
 
   const email = user.email;
   if (!email) return;
@@ -30,5 +37,11 @@ export async function ensureLcProfile(user: User): Promise<void> {
     },
     { onConflict: "id" },
   );
-  if (upsertError) throw upsertError;
+  if (upsertError) {
+    if (isRecoverableDbError(upsertError)) {
+      console.warn("[PrepSmart LC] Could not create user_profiles:", upsertError);
+      return;
+    }
+    throw upsertError;
+  }
 }

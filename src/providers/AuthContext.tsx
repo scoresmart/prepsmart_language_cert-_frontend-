@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
+import { isRecoverableDbError } from "@/lib/supabase/errors";
 import { ensureLcProfile } from "@/lib/ensureLcProfile";
 import type { LcUserProfile } from "@/types/lc";
 
@@ -28,8 +29,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await ensureLcProfile(u);
       const { data, error } = await supabase.from("user_profiles").select("*").eq("id", u.id).maybeSingle();
-      if (error) throw error;
-      setProfile(data as LcUserProfile | null);
+      if (error && !isRecoverableDbError(error)) throw error;
+      if (error) console.warn("[PrepSmart LC] Profile unavailable:", error);
+      setProfile(error ? null : (data as LcUserProfile | null));
     } catch (e) {
       console.error(e);
       setProfile(null);

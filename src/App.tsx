@@ -37,6 +37,15 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { PracticeDialoguesPage } from "@/pages/PracticeDialoguesPage";
 import { PracticeRapidPage } from "@/pages/PracticeRapidPage";
+import {
+  PracticeLegacyQuestionRedirect,
+  PracticeLegacyQuestionsRedirect,
+} from "@/pages/PracticeLegacyRedirect";
+import { PracticeHomePage } from "@/pages/PracticeHomePage";
+import { PracticeModulePage } from "@/pages/PracticeModulePage";
+import { PracticeQuestionPage } from "@/pages/PracticeQuestionPage";
+import { PracticeQuestionsHubPage } from "@/pages/PracticeQuestionsHubPage";
+import { PracticeWorkspaceRedirect } from "@/pages/PracticeWorkspaceRedirect";
 import { SignupPage } from "@/pages/SignupPage";
 import { SubscriptionPage } from "@/pages/SubscriptionPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -70,10 +79,24 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route
+            path="/workspace/:module/:partSlug/question/:questionIndex"
+            element={<PracticeQuestionPage />}
+          />
+          <Route
+            path="/practice/:module/:partSlug/question/:questionIndex"
+            element={<PracticeWorkspaceRedirect />}
+          />
+
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/practice" element={<PracticeHomePage />} />
             <Route path="/practice/dialogues" element={<PracticeDialoguesPage />} />
             <Route path="/practice/rapid-reviews" element={<PracticeRapidPage />} />
+            <Route path="/practice/:module/:partSlug/questions" element={<PracticeQuestionsHubPage />} />
+            <Route path="/practice/:module/questions" element={<PracticeLegacyQuestionsRedirect />} />
+            <Route path="/practice/:module/question/:questionIndex" element={<PracticeLegacyQuestionRedirect />} />
+            <Route path="/practice/:module" element={<PracticeModulePage />} />
             <Route path="/attempts" element={<AttemptsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />

@@ -1,402 +1,433 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Headphones, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Headphones, Volume2, VolumeX } from "lucide-react";
+
+const SUPABASE_URL = "https://sepzceaicoldqhyxxzff.supabase.co";
+
+function getAudioUrl(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  if (filename.startsWith("http")) return filename;
+  return `${SUPABASE_URL}/storage/v1/object/public/listening-audio/${filename}`;
+}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase/client";
+import { api, type ListeningQuestion } from "@/lib/api";
 
-// LanguageCert SELT Listening task types — grouped by Part
-const LISTENING_PARTS = [
-  {
-    part: "listening_part_1", label: "Part 1",
-    tasks: [
-      { value: "listening_part_1_task_1", label: "Task 1" },
-      { value: "listening_part_1_task_2", label: "Task 2" },
-      { value: "listening_part_1_task_3", label: "Task 3" },
-      { value: "listening_part_1_task_4", label: "Task 4" },
-      { value: "listening_part_1_task_5", label: "Task 5" },
-      { value: "listening_part_1_task_6", label: "Task 6" },
-      { value: "listening_part_1_task_7", label: "Task 7" },
-      { value: "listening_part_1_task_8", label: "Task 8" },
-    ],
-  },
-  {
-    part: "listening_part_2", label: "Part 2",
-    tasks: [
-      { value: "listening_part_2_task_1", label: "Task 1" },
-      { value: "listening_part_2_task_2", label: "Task 2" },
-      { value: "listening_part_2_task_3", label: "Task 3" },
-      { value: "listening_part_2_task_4", label: "Task 4" },
-      { value: "listening_part_2_task_5", label: "Task 5" },
-      { value: "listening_part_2_task_6", label: "Task 6" },
-      { value: "listening_part_2_task_7", label: "Task 7" },
-      { value: "listening_part_2_task_8", label: "Task 8" },
-    ],
-  },
-  {
-    part: "listening_part_3", label: "Part 3",
-    tasks: [
-      { value: "listening_part_3_task_1", label: "Task 1" },
-      { value: "listening_part_3_task_2", label: "Task 2" },
-      { value: "listening_part_3_task_3", label: "Task 3" },
-      { value: "listening_part_3_task_4", label: "Task 4" },
-      { value: "listening_part_3_task_5", label: "Task 5" },
-      { value: "listening_part_3_task_6", label: "Task 6" },
-      { value: "listening_part_3_task_7", label: "Task 7" },
-      { value: "listening_part_3_task_8", label: "Task 8" },
-    ],
-  },
-  {
-    part: "listening_part_4", label: "Part 4",
-    tasks: [
-      { value: "listening_part_4_task_1", label: "Task 1" },
-      { value: "listening_part_4_task_2", label: "Task 2" },
-      { value: "listening_part_4_task_3", label: "Task 3" },
-      { value: "listening_part_4_task_4", label: "Task 4" },
-      { value: "listening_part_4_task_5", label: "Task 5" },
-      { value: "listening_part_4_task_6", label: "Task 6" },
-      { value: "listening_part_4_task_7", label: "Task 7" },
-      { value: "listening_part_4_task_8", label: "Task 8" },
-    ],
-  },
-];
+// ─── Part metadata ─────────────────────────────────────────────────────────────
 
-// Flat list for filters/lookups
-const DIFFICULTY_LEVELS = ["A1", "A2", "B1", "B2"];
+const PARTS = [
+  { number: 1, label: "Part 1", description: "Part 1 – Short Exchanges (7 MCQs)", expectedCount: 22 },
+  { number: 2, label: "Part 2", description: "Part 2 – Conversations (5 pairs × 2 Qs)", expectedCount: 22 },
+  { number: 3, label: "Part 3", description: "Part 3 – Note Completion (fill-in-the-blank)", expectedCount: 23 },
+  { number: 4, label: "Part 4", description: "Part 4 – Extended Discussion (6 MCQs)", expectedCount: 21 },
+] as const;
 
-type Question = {
-  id: string;
-  title: string;
-  type: string;
-  level: string;
-  max_score: number;
-  is_published: boolean;
-  created_at: string;
-  content?: string;
-  audio_url?: string;
-  options?: string;
-  correct_answer?: string;
+type PartNumber = 1 | 2 | 3 | 4;
+
+// ─── Placeholder JSON per part ─────────────────────────────────────────────────
+
+const PLACEHOLDERS: Record<PartNumber, string> = {
+  1: `[{"optionA":"...","optionB":"...","optionC":"...","correctAnswer":"B"}]`,
+  2: `[{"context":"You hear two students talking...","questions":[{"questionText":"What does the man say?","optionA":"...","optionB":"...","optionC":"...","correctAnswer":"A"}]}]`,
+  3: `{"title":"You will hear a student giving a presentation...","questionText":"The villa was first discovered... [___1___]...","answers":["coastal erosion","bathing suites"]}`,
+  4: `{"description":"You hear part of a podcast...","questions":[{"questionText":"What does Peter say?","options":["option A","option B","option C"],"correctAnswer":1}]}`,
 };
 
-type FormData = {
-  title: string;
-  type: string;
-  level: string;
-  max_score: number;
-  is_published: boolean;
-  content: string;
-  audio_url: string;
-  options: string;
-  correct_answer: string;
+const JSON_LABELS: Record<PartNumber, string> = {
+  1: "Questions JSON (array of 7 MCQs)",
+  2: "Questions JSON (array of 5 conversations)",
+  3: "Questions JSON (note completion)",
+  4: "Questions JSON (6 MCQs)",
 };
 
-const emptyForm: FormData = {
-  title: "",
-  type: "write_from_dictation",
-  level: "medium",
-  max_score: 3,
-  is_published: false,
-  content: "",
-  audio_url: "",
-  options: "",
-  correct_answer: "",
+// ─── Form state ────────────────────────────────────────────────────────────────
+
+type FormState = {
+  audio_path: string;
+  questionsJson: string;
+  jsonError: string;
 };
 
-export function AdminListeningPage() {
+const emptyForm: FormState = { audio_path: "", questionsJson: "", jsonError: "" };
+
+// ─── Per-part query component ──────────────────────────────────────────────────
+
+function PartPanel({ partNumber }: { partNumber: PartNumber }) {
   const qc = useQueryClient();
-  const [search, setSearch] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editRow, setEditRow] = React.useState<Question | null>(null);
-  const [form, setForm] = React.useState<FormData>(emptyForm);
+  const [editRow, setEditRow] = React.useState<ListeningQuestion | null>(null);
+  const [form, setForm] = React.useState<FormState>(emptyForm);
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ["admin", "listening-questions"],
+    queryKey: ["admin", "listening", partNumber],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("id,title,type,level,max_score,is_published,created_at,content,audio_url,options,correct_answer")
-        .eq("section", "listening")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as Question[];
+      const res = await api.listening.list({ part_number: partNumber });
+      return res.data?.questions ?? [];
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: FormData & { id?: string }) => {
-      const payload = {
-        title: data.title,
-        type: data.type,
-        section: "listening",
-        level: data.level,
-        max_score: data.max_score,
-        is_published: data.is_published,
-        content: data.content || null,
-        audio_url: data.audio_url || null,
-        options: data.options || null,
-        correct_answer: data.correct_answer || null,
-      };
-      if (data.id) {
-        const { error } = await supabase.from("questions").update(payload).eq("id", data.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("questions").insert(payload);
-        if (error) throw error;
+  const rows = q.data ?? [];
+
+  // ── Mutations ──
+
+  const createMutation = useMutation({
+    mutationFn: async (f: FormState) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(f.questionsJson);
+      } catch {
+        throw new Error("__json__");
       }
+      await api.listening.create({
+        part_number: partNumber,
+        audio_path: f.audio_path || undefined,
+        questions: parsed as ListeningQuestion["questions"],
+      });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "listening-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
+      setDialogOpen(false);
+      setForm(emptyForm);
+    },
+    onError: (err: Error) => {
+      if (err.message === "__json__") {
+        setForm((prev) => ({ ...prev, jsonError: "Invalid JSON" }));
+      }
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, f }: { id: string; f: FormState }) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(f.questionsJson);
+      } catch {
+        throw new Error("__json__");
+      }
+      await api.listening.update(id, {
+        audio_path: f.audio_path || undefined,
+        questions: parsed as ListeningQuestion["questions"],
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
       setDialogOpen(false);
       setEditRow(null);
       setForm(emptyForm);
     },
+    onError: (err: Error) => {
+      if (err.message === "__json__") {
+        setForm((prev) => ({ ...prev, jsonError: "Invalid JSON" }));
+      }
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("questions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => api.listening.delete(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "listening-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
       setDeleteId(null);
     },
   });
 
-  const togglePublish = useMutation({
-    mutationFn: async ({ id, val }: { id: string; val: boolean }) => {
-      const { error } = await supabase.from("questions").update({ is_published: val }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "listening-questions"] }),
-  });
+  // ── Handlers ──
 
-  const [expandedParts, setExpandedParts] = React.useState<Set<string>>(
-    new Set(LISTENING_PARTS.map((p) => p.part))
-  );
-  const togglePart = (part: string) =>
-    setExpandedParts((prev) => {
-      const next = new Set(prev);
-      next.has(part) ? next.delete(part) : next.add(part);
-      return next;
-    });
-
-  const openAdd = () => { setEditRow(null); setForm(emptyForm); setDialogOpen(true); };
-  const openAddForTask = (taskValue: string) => {
+  const openAdd = () => {
     setEditRow(null);
-    setForm({ ...emptyForm, type: taskValue });
+    setForm(emptyForm);
     setDialogOpen(true);
   };
-  const openEdit = (row: Question) => {
+
+  const openEdit = (row: ListeningQuestion) => {
     setEditRow(row);
     setForm({
-      title: row.title, type: row.type, level: row.level, max_score: row.max_score,
-      is_published: row.is_published, content: row.content ?? "",
-      audio_url: row.audio_url ?? "", options: row.options ?? "",
-      correct_answer: row.correct_answer ?? "",
+      audio_path: row.audio_path ?? "",
+      questionsJson: JSON.stringify(row.questions, null, 2),
+      jsonError: "",
     });
     setDialogOpen(true);
   };
 
-  const grouped = React.useMemo(() => {
-    const rows = q.data ?? [];
-    const s = search.toLowerCase();
-    return LISTENING_PARTS.map((part) => ({
-      ...part,
-      tasks: part.tasks.map((task) => ({
-        ...task,
-        questions: rows.filter(
-          (r) => r.type === task.value && (!s || r.title.toLowerCase().includes(s))
-        ),
-      })),
-    }));
-  }, [q.data, search]);
+  const handleSave = () => {
+    setForm((prev) => ({ ...prev, jsonError: "" }));
+    if (editRow) {
+      updateMutation.mutate({ id: editRow.id, f: form });
+    } else {
+      createMutation.mutate(form);
+    }
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500">
-            <Headphones className="size-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Listening Questions</h1>
-            <p className="text-sm text-slate-500">{q.data?.length ?? 0} questions total</p>
-          </div>
-        </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="size-4" />
-          Add Question
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-slate-500">{rows.length} question set{rows.length !== 1 ? "s" : ""} loaded</p>
+        <Button onClick={openAdd} size="sm" className="gap-1.5">
+          <Plus className="size-3.5" />
+          Add Question Set
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-        <Input placeholder="Search questions..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
-
-      {/* Part → Task → Questions accordion */}
       {q.isLoading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
+      ) : q.isError ? (
+        <div className="py-10 text-center text-sm text-red-500">Failed to load questions.</div>
+      ) : rows.length === 0 ? (
+        <div className="py-10 text-center text-sm text-slate-400">No question sets yet. Click "Add Question Set" to create one.</div>
       ) : (
-        <div className="space-y-4">
-          {grouped.map((part) => {
-            const partTotal = part.tasks.reduce((s, t) => s + t.questions.length, 0);
-            const isOpen = expandedParts.has(part.part);
-            return (
-              <div key={part.part} className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                {/* Part header */}
-                <button
-                  onClick={() => togglePart(part.part)}
-                  className="flex w-full items-center justify-between px-5 py-4 hover:bg-slate-50 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500">
-                      <Headphones className="size-4 text-white" />
-                    </div>
-                    <span className="font-semibold text-slate-800">Listening {part.label}</span>
-                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-                      {partTotal} question{partTotal !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  {isOpen ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
-                </button>
-
-                {/* Tasks inside part */}
-                {isOpen && (
-                  <div className="divide-y border-t">
-                    {part.tasks.map((task) => (
-                      <div key={task.value}>
-                        {/* Task sub-header */}
-                        <div className="flex items-center justify-between bg-slate-50 px-6 py-2.5">
-                          <span className="text-sm font-medium text-slate-700">{task.label}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-400">{task.questions.length} question{task.questions.length !== 1 ? "s" : ""}</span>
-                            <button
-                              onClick={() => openAddForTask(task.value)}
-                              className="flex items-center gap-1 rounded-md bg-orange-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-600 transition"
-                            >
-                              <Plus className="size-3" /> Add
-                            </button>
-                          </div>
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-slate-50 text-left">
+                <th className="px-4 py-3 font-medium text-slate-500">Audio File</th>
+                <th className="px-4 py-3 font-medium text-slate-500">Q Count</th>
+                <th className="px-4 py-3 font-medium text-slate-500">Created</th>
+                <th className="px-4 py-3 font-medium text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const audioUrl = getAudioUrl(row.audio_path);
+                return (
+                <tr key={row.id} className="border-b last:border-0 hover:bg-slate-50/50">
+                  <td className="px-4 py-3">
+                    {audioUrl ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Volume2 className="size-3.5 text-orange-500 shrink-0" />
+                          <span className="font-mono truncate max-w-[180px]">{row.audio_path}</span>
                         </div>
-                        {/* Question rows */}
-                        {task.questions.length === 0 ? (
-                          <div className="px-8 py-3 text-xs text-slate-400 italic">No questions yet — click Add to create one.</div>
-                        ) : (
-                          task.questions.map((row) => (
-                            <div key={row.id} className="flex items-center gap-3 px-8 py-2.5 hover:bg-slate-50/60 transition">
-                              <span className="flex-1 truncate text-sm text-slate-700">{row.title}</span>
-                              <span className="text-xs text-slate-400 uppercase">{row.level}</span>
-                              <span className="text-xs text-slate-400">{row.max_score}pts</span>
-                              <Switch checked={row.is_published} onCheckedChange={(val) => togglePublish.mutate({ id: row.id, val })} />
-                              <button onClick={() => openEdit(row)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                                <Pencil className="size-3.5" />
-                              </button>
-                              <button onClick={() => setDeleteId(row.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          ))
-                        )}
+                        <audio
+                          controls
+                          src={audioUrl}
+                          className="h-8 w-56"
+                          preload="none"
+                        />
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400 italic">
+                        <VolumeX className="size-3.5" />No audio
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {Array.isArray(row.questions) ? row.questions.length : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">
+                    {new Date(row.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openEdit(row)}
+                        className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                        title="Edit"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteId(row.id)}
+                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                        title="Delete"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );})}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+      {/* Create / Edit dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); setForm(emptyForm); setEditRow(null); } }}>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editRow ? "Edit Listening Question" : "Add Listening Question"}</DialogTitle>
+            <DialogTitle>
+              {editRow ? "Edit Question Set" : "Add Question Set"} — {PARTS[partNumber - 1].description}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Title *</Label>
-              <Input placeholder="Question title..." value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Type *</Label>
-                <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  {LISTENING_PARTS.map((p) => (
-                    <optgroup key={p.part} label={`Listening ${p.label}`}>
-                      {p.tasks.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </optgroup>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Difficulty</Label>
-                <Select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}>
-                  {DIFFICULTY_LEVELS.map((l) => <option key={l} value={l} className="capitalize">{l}</option>)}
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Max Score</Label>
-                <Input type="number" min={1} value={form.max_score} onChange={(e) => setForm({ ...form, max_score: parseInt(e.target.value) || 1 })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Audio URL</Label>
-                <Input placeholder="https://..." value={form.audio_url} onChange={(e) => setForm({ ...form, audio_url: e.target.value })} />
-              </div>
+              <Label>Audio filename</Label>
+              <Input
+                placeholder="e.g. part1_1765447891247.mp3"
+                value={form.audio_path}
+                onChange={(e) => setForm({ ...form, audio_path: e.target.value })}
+              />
+              <p className="text-xs text-slate-400">Storage filename only — file must be in the <code>listening-audio</code> bucket.</p>
+              {/* Live audio player preview */}
+              {getAudioUrl(form.audio_path) && (
+                <div className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2.5 flex items-center gap-3">
+                  <Volume2 className="size-4 text-orange-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-orange-700 truncate mb-1">{form.audio_path}</p>
+                    <audio controls src={getAudioUrl(form.audio_path)!} className="h-8 w-full" preload="metadata" />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
-              <Label>Transcript / Content</Label>
-              <Textarea placeholder="Audio transcript or question content..." rows={4} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Answer Options (one per line)</Label>
-              <Textarea placeholder="Option A&#10;Option B&#10;Option C" rows={3} value={form.options} onChange={(e) => setForm({ ...form, options: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Correct Answer</Label>
-              <Input placeholder="e.g. Option A" value={form.correct_answer} onChange={(e) => setForm({ ...form, correct_answer: e.target.value })} />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={form.is_published} onCheckedChange={(val) => setForm({ ...form, is_published: val })} />
-              <Label>Published</Label>
+              <Label>{JSON_LABELS[partNumber]}</Label>
+              <Textarea
+                placeholder={PLACEHOLDERS[partNumber]}
+                rows={10}
+                className="font-mono text-xs"
+                value={form.questionsJson}
+                onChange={(e) => setForm({ ...form, questionsJson: e.target.value, jsonError: "" })}
+              />
+              {form.jsonError && (
+                <p className="text-xs font-medium text-red-500">{form.jsonError}</p>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate({ ...form, id: editRow?.id })} disabled={!form.title || saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : editRow ? "Save Changes" : "Add Question"}
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setForm(emptyForm); setEditRow(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!form.questionsJson.trim() || isSaving}>
+              {isSaving ? "Saving…" : editRow ? "Save Changes" : "Add Question Set"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Delete confirmation dialog */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Question?</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Delete Question Set?</DialogTitle>
+          </DialogHeader>
           <p className="text-sm text-slate-500">This action cannot be undone.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
+            <Button
+              variant="destructive"
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              disabled={deleteMutation.isPending}
+            >
               {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+// ─── Stat card for a single part ──────────────────────────────────────────────
+
+function PartStatCard({
+  partNumber,
+  description,
+  expectedCount,
+}: {
+  partNumber: PartNumber;
+  description: string;
+  expectedCount: number;
+}) {
+  const q = useQuery({
+    queryKey: ["admin", "listening", partNumber],
+    queryFn: async () => {
+      const res = await api.listening.list({ part_number: partNumber });
+      return res.data?.questions ?? [];
+    },
+  });
+
+  const count = q.data?.length ?? 0;
+
+  return (
+    <Card className="border-0 bg-white shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+          {description}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-end gap-1.5">
+          <span className="text-2xl font-bold text-slate-800">{count}</span>
+          <span className="mb-0.5 text-xs text-slate-400">/ {expectedCount} sets</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export function AdminListeningPage() {
+  const [activeTab, setActiveTab] = React.useState<PartNumber>(1);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500">
+          <Headphones className="size-5 text-white" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-slate-800">Listening Questions</h1>
+          <p className="text-sm text-slate-500">Manage listening_part_questions — 4 parts, 88 questions total</p>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {PARTS.map((p) => (
+          <PartStatCard
+            key={p.number}
+            partNumber={p.number as PartNumber}
+            description={p.description}
+            expectedCount={p.expectedCount}
+          />
+        ))}
+      </div>
+
+      {/* Tab bar */}
+      <div className="border-b">
+        <nav className="-mb-px flex gap-1">
+          {PARTS.map((p) => (
+            <button
+              key={p.number}
+              onClick={() => setActiveTab(p.number as PartNumber)}
+              className={[
+                "px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap",
+                activeTab === p.number
+                  ? "border-orange-500 text-orange-600"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300",
+              ].join(" ")}
+            >
+              {p.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Active tab panel */}
+      <Card className="border-0 bg-white shadow-sm">
+        <CardHeader className="border-b px-5 py-4">
+          <CardTitle className="text-sm font-semibold text-slate-700">
+            {PARTS[activeTab - 1].description}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-5">
+          <PartPanel partNumber={activeTab} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

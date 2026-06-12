@@ -1,194 +1,314 @@
 import * as React from "react";
+import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, PenLine, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, PenLine, Search, X, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase/client";
-// LanguageCert SELT Writing task types — grouped by Part
-const WRITING_PARTS = [
-  {
-    part: "writing_part_1", label: "Part 1",
-    tasks: [
-      { value: "writing_part_1_task_1", label: "Task 1" },
-      { value: "writing_part_1_task_2", label: "Task 2" },
-      { value: "writing_part_1_task_3", label: "Task 3" },
-      { value: "writing_part_1_task_4", label: "Task 4" },
-      { value: "writing_part_1_task_5", label: "Task 5" },
-      { value: "writing_part_1_task_6", label: "Task 6" },
-      { value: "writing_part_1_task_7", label: "Task 7" },
-      { value: "writing_part_1_task_8", label: "Task 8" },
-    ],
-  },
-  {
-    part: "writing_part_2", label: "Part 2",
-    tasks: [
-      { value: "writing_part_2_task_1", label: "Task 1" },
-      { value: "writing_part_2_task_2", label: "Task 2" },
-      { value: "writing_part_2_task_3", label: "Task 3" },
-      { value: "writing_part_2_task_4", label: "Task 4" },
-      { value: "writing_part_2_task_5", label: "Task 5" },
-      { value: "writing_part_2_task_6", label: "Task 6" },
-      { value: "writing_part_2_task_7", label: "Task 7" },
-      { value: "writing_part_2_task_8", label: "Task 8" },
-    ],
-  },
-];
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { api, type WritingQuestion } from "@/lib/api";
 
-// Flat list for filters/lookups
-const DIFFICULTY_LEVELS = ["A1", "A2", "B1", "B2"];
+// ─── Storage URL helper ───────────────────────────────────────────────────────
 
-type Question = {
-  id: string;
-  title: string;
-  type: string;
-  level: string;
-  max_score: number;
-  is_published: boolean;
-  created_at: string;
-  content?: string;
-  word_limit?: number;
-  time_limit?: number;
+const SUPABASE_URL = "https://sepzceaicoldqhyxxzff.supabase.co";
+
+function getImageUrl(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  // If it's already a full URL, return as-is
+  if (filename.startsWith("http")) return filename;
+  return `${SUPABASE_URL}/storage/v1/object/public/writing-task-images/${filename}`;
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const TASK_LABELS: Record<string, string> = {
+  task1: "Task 1 – Short Report (150–200 words)",
+  task2: "Task 2 – Extended Essay (250 words)",
 };
 
-type FormData = {
-  title: string;
-  type: string;
-  level: string;
-  max_score: number;
-  is_published: boolean;
-  content: string;
-  word_limit: number;
-  time_limit: number;
+type TaskType = "task1" | "task2";
+
+// ─── Form state ─────────────────────────────────────────────────────────────
+
+type FormState = {
+  question_text: string;
+  image_path: string;
 };
 
-const emptyForm: FormData = {
-  title: "",
-  type: "writing_part_1_task_1",
-  level: "A2",
-  max_score: 7,
-  is_published: false,
-  content: "",
-  word_limit: 200,
-  time_limit: 10,
+const emptyForm: FormState = {
+  question_text: "",
+  image_path: "",
 };
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
+
+function truncate(text: string, len: number): string {
+  return text.length > len ? text.slice(0, len) + "…" : text;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition"
+        onClick={onClose}
+      >
+        <X className="size-5" />
+      </button>
+      <img
+        src={src}
+        alt="Question image"
+        className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+// ─── Question Table ────────────────────────────────────────────────────────────
+
+interface QTableProps {
+  rows: WritingQuestion[];
+  onEdit: (row: WritingQuestion) => void;
+  onDelete: (id: string) => void;
+  onPreviewImage: (url: string) => void;
+  showImageColumn: boolean;
+}
+
+function QuestionTable({ rows, onEdit, onDelete, onPreviewImage, showImageColumn }: QTableProps) {
+  if (rows.length === 0) {
+    return (
+      <div className="py-10 text-center text-sm text-slate-400 italic">
+        No questions yet — click "Add Question" to create one.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
+            <th className="px-4 py-3">Preview</th>
+            {showImageColumn && <th className="px-4 py-3 w-28 text-center">Image</th>}
+            <th className="px-4 py-3 w-32">Created</th>
+            <th className="px-4 py-3 w-24 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((row) => {
+            const imgUrl = showImageColumn ? getImageUrl(row.image_path) : null;
+            return (
+              <tr key={row.id} className="hover:bg-slate-50/60 transition">
+                <td className="px-4 py-3 text-slate-700 max-w-xs">
+                  <span className="line-clamp-2">{truncate(row.question_text, 80)}</span>
+                </td>
+                {showImageColumn && (
+                  <td className="px-4 py-3 text-center">
+                    {imgUrl ? (
+                      <button
+                        onClick={() => onPreviewImage(imgUrl)}
+                        className="group relative inline-block"
+                        title="Click to enlarge"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt="question"
+                          className="h-12 w-20 rounded object-cover border border-slate-200 group-hover:border-purple-400 transition"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                          }}
+                        />
+                        <span className="hidden">
+                          <Badge variant="outline" className="text-slate-400 text-xs">broken</Badge>
+                        </span>
+                        <span className="absolute inset-0 flex items-center justify-center rounded bg-black/0 group-hover:bg-black/20 transition">
+                          <ZoomIn className="size-4 text-white opacity-0 group-hover:opacity-100 transition" />
+                        </span>
+                      </button>
+                    ) : null}
+                  </td>
+                )}
+                <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(row.created_at)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => onEdit(row)}
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(row.id)}
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export function AdminWritingPage() {
   const qc = useQueryClient();
+
+  // Tab state
+  const [activeTab, setActiveTab] = React.useState<TaskType>("task1");
+
+  // Search per tab
   const [search, setSearch] = React.useState("");
+
+  // Dialog state
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editRow, setEditRow] = React.useState<Question | null>(null);
-  const [form, setForm] = React.useState<FormData>(emptyForm);
+  const [editRow, setEditRow] = React.useState<WritingQuestion | null>(null);
+  const [dialogTab, setDialogTab] = React.useState<TaskType>("task1");
+  const [form, setForm] = React.useState<FormState>(emptyForm);
+
+  // Delete confirm dialog
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
 
-  const q = useQuery({
+  // Lightbox
+  const [lightboxUrl, setLightboxUrl] = React.useState<string | null>(null);
+
+  // ─── Query ─────────────────────────────────────────────────────────────────
+
+  const { data: allQuestions = [], isLoading, isError, error } = useQuery({
     queryKey: ["admin", "writing-questions"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("id,title,type,level,max_score,is_published,created_at,content,word_limit,time_limit")
-        .eq("section", "writing")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as Question[];
+      const res = await api.writing.list(); // GET /questions/writing — no filter = all
+      return res.data ?? [];
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: FormData & { id?: string }) => {
-      const payload = {
-        title: data.title,
-        type: data.type,
-        section: "writing",
-        level: data.level,
-        max_score: data.max_score,
-        is_published: data.is_published,
-        content: data.content || null,
-        word_limit: data.word_limit || null,
-        time_limit: data.time_limit || null,
-      };
-      if (data.id) {
-        const { error } = await supabase.from("questions").update(payload).eq("id", data.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("questions").insert(payload);
-        if (error) throw error;
-      }
-    },
+  const task1Questions = React.useMemo(
+    () => allQuestions.filter((q) => q.task_type === "task1"),
+    [allQuestions],
+  );
+  const task2Questions = React.useMemo(
+    () => allQuestions.filter((q) => q.task_type === "task2"),
+    [allQuestions],
+  );
+
+  const activeQuestions = activeTab === "task1" ? task1Questions : task2Questions;
+
+  const filteredQuestions = React.useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return activeQuestions;
+    return activeQuestions.filter((q) => q.question_text.toLowerCase().includes(s));
+  }, [activeQuestions, search]);
+
+  // ─── Mutations ─────────────────────────────────────────────────────────────
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: { task_type: string; question_text: string; image_path?: string }) =>
+      api.writing.create(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "writing-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
-      setDialogOpen(false);
-      setEditRow(null);
-      setForm(emptyForm);
+      closeDialog();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Partial<WritingQuestion> }) =>
+      api.writing.update(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "writing-questions"] });
+      closeDialog();
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("questions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => api.writing.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "writing-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
       setDeleteId(null);
     },
   });
 
-  const togglePublish = useMutation({
-    mutationFn: async ({ id, val }: { id: string; val: boolean }) => {
-      const { error } = await supabase.from("questions").update({ is_published: val }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "writing-questions"] }),
-  });
+  // ─── Dialog helpers ────────────────────────────────────────────────────────
 
-  const [expandedParts, setExpandedParts] = React.useState<Set<string>>(
-    new Set(WRITING_PARTS.map((p) => p.part))
-  );
-  const togglePart = (part: string) =>
-    setExpandedParts((prev) => {
-      const next = new Set(prev);
-      next.has(part) ? next.delete(part) : next.add(part);
-      return next;
-    });
+  function openAdd(taskType: TaskType) {
+    setEditRow(null);
+    setDialogTab(taskType);
+    setForm(emptyForm);
+    setDialogOpen(true);
+  }
 
-  const openAdd = () => { setEditRow(null); setForm(emptyForm); setDialogOpen(true); };
-  const openAddForTask = (taskValue: string) => {
-    setEditRow(null); setForm({ ...emptyForm, type: taskValue }); setDialogOpen(true);
-  };
-  const openEdit = (row: Question) => {
+  function openEdit(row: WritingQuestion) {
     setEditRow(row);
+    setDialogTab(row.task_type as TaskType);
     setForm({
-      title: row.title, type: row.type, level: row.level, max_score: row.max_score,
-      is_published: row.is_published, content: row.content ?? "",
-      word_limit: row.word_limit ?? 200, time_limit: row.time_limit ?? 10,
+      question_text: row.question_text,
+      image_path: row.image_path ?? "",
     });
     setDialogOpen(true);
-  };
+  }
 
-  const grouped = React.useMemo(() => {
-    const rows = q.data ?? [];
-    const s = search.toLowerCase();
-    return WRITING_PARTS.map((part) => ({
-      ...part,
-      tasks: part.tasks.map((task) => ({
-        ...task,
-        questions: rows.filter((r) => r.type === task.value && (!s || r.title.toLowerCase().includes(s))),
-      })),
-    }));
-  }, [q.data, search]);
+  function closeDialog() {
+    setDialogOpen(false);
+    setEditRow(null);
+    setForm(emptyForm);
+  }
+
+  function handleSave() {
+    const imagePathVal = form.image_path.trim() || undefined;
+    if (editRow) {
+      updateMutation.mutate({
+        id: editRow.id,
+        body: { question_text: form.question_text, image_path: imagePathVal ?? null },
+      });
+    } else {
+      createMutation.mutate({
+        task_type: dialogTab,
+        question_text: form.question_text,
+        image_path: imagePathVal,
+      });
+    }
+  }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const saveError = createMutation.error || updateMutation.error;
+  const deleteError = deleteMutation.error;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+      {/* Page header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500">
@@ -196,143 +316,192 @@ export function AdminWritingPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">Writing Questions</h1>
-            <p className="text-sm text-slate-500">{q.data?.length ?? 0} questions total</p>
+            <p className="text-sm text-slate-500">{allQuestions.length} questions total</p>
           </div>
         </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="size-4" />
-          Add Question
-        </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-        <Input placeholder="Search questions..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 max-w-md">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Task 1 Questions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-purple-600">{task1Questions.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Task 2 Questions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-purple-600">{task2Questions.length}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Part → Task → Questions accordion */}
-      {q.isLoading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
-      ) : (
-        <div className="space-y-4">
-          {grouped.map((part) => {
-            const partTotal = part.tasks.reduce((s, t) => s + t.questions.length, 0);
-            const isOpen = expandedParts.has(part.part);
-            return (
-              <div key={part.part} className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                <button onClick={() => togglePart(part.part)} className="flex w-full items-center justify-between px-5 py-4 hover:bg-slate-50 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500">
-                      <PenLine className="size-4 text-white" />
-                    </div>
-                    <span className="font-semibold text-slate-800">Writing {part.label}</span>
-                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">{partTotal} question{partTotal !== 1 ? "s" : ""}</span>
-                  </div>
-                  {isOpen ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
-                </button>
-                {isOpen && (
-                  <div className="divide-y border-t">
-                    {part.tasks.map((task) => (
-                      <div key={task.value}>
-                        <div className="flex items-center justify-between bg-slate-50 px-6 py-2.5">
-                          <span className="text-sm font-medium text-slate-700">{task.label}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-400">{task.questions.length} question{task.questions.length !== 1 ? "s" : ""}</span>
-                            <button onClick={() => openAddForTask(task.value)} className="flex items-center gap-1 rounded-md bg-purple-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-600 transition">
-                              <Plus className="size-3" /> Add
-                            </button>
-                          </div>
-                        </div>
-                        {task.questions.length === 0 ? (
-                          <div className="px-8 py-3 text-xs text-slate-400 italic">No questions yet — click Add to create one.</div>
-                        ) : task.questions.map((row) => (
-                          <div key={row.id} className="flex items-center gap-3 px-8 py-2.5 hover:bg-slate-50/60 transition">
-                            <span className="flex-1 truncate text-sm text-slate-700">{row.title}</span>
-                            <span className="text-xs text-slate-400 uppercase">{row.level}</span>
-                            <span className="text-xs text-slate-400">{row.max_score}pts</span>
-                            <Switch checked={row.is_published} onCheckedChange={(val) => togglePublish.mutate({ id: row.id, val })} />
-                            <button onClick={() => openEdit(row)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="size-3.5" /></button>
-                            <button onClick={() => setDeleteId(row.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-3.5" /></button>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* Error */}
+      {isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Failed to load questions: {(error as Error)?.message ?? "Unknown error"}
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Tabs */}
+      <TabsPrimitive.Root
+        value={activeTab}
+        onValueChange={(v) => { setActiveTab(v as TaskType); setSearch(""); }}
+      >
+        <TabsPrimitive.List className="flex border-b mb-0">
+          {(["task1", "task2"] as TaskType[]).map((tab) => (
+            <TabsPrimitive.Trigger
+              key={tab}
+              value={tab}
+              className="px-5 py-2.5 text-sm font-medium text-slate-500 border-b-2 border-transparent data-[state=active]:text-purple-600 data-[state=active]:border-purple-600 transition hover:text-slate-700"
+            >
+              {tab === "task1" ? "Task 1" : "Task 2"}
+              <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
+                {tab === "task1" ? task1Questions.length : task2Questions.length}
+              </span>
+            </TabsPrimitive.Trigger>
+          ))}
+        </TabsPrimitive.List>
+
+        {(["task1", "task2"] as TaskType[]).map((tab) => (
+          <TabsPrimitive.Content key={tab} value={tab}>
+            <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+              {/* Tab toolbar */}
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-slate-50">
+                <div className="text-xs text-slate-500 font-medium">{TASK_LABELS[tab]}</div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+                    <Input
+                      placeholder="Search questions…"
+                      className="pl-8 h-8 text-sm w-56"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <Button size="sm" className="gap-1.5 h-8" onClick={() => openAdd(tab)}>
+                    <Plus className="size-3.5" />
+                    Add Question
+                  </Button>
+                </div>
+              </div>
+
+              {/* Table */}
+              {isLoading ? (
+                <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
+              ) : (
+                <QuestionTable
+                  rows={filteredQuestions}
+                  onEdit={openEdit}
+                  onDelete={setDeleteId}
+                  onPreviewImage={setLightboxUrl}
+                  showImageColumn={tab === "task1"}
+                />
+              )}
+            </div>
+          </TabsPrimitive.Content>
+        ))}
+      </TabsPrimitive.Root>
+
+      {/* Create / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editRow ? "Edit Writing Question" : "Add Writing Question"}</DialogTitle>
+            <DialogTitle>
+              {editRow ? "Edit Writing Question" : `Add ${TASK_LABELS[dialogTab]}`}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Title *</Label>
-              <Input placeholder="Question title..." value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Label>Prompt / Instructions <span className="text-red-500">*</span></Label>
+              <Textarea
+                placeholder="Enter the writing prompt or instructions for students…"
+                rows={6}
+                value={form.question_text}
+                onChange={(e) => setForm({ ...form, question_text: e.target.value })}
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {/* Image field — only for Task 1 (Task 2 never has images) */}
+            {dialogTab === "task1" && (
               <div className="space-y-1.5">
-                <Label>Type *</Label>
-                <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  {WRITING_PARTS.map((p) => (
-                    <optgroup key={p.part} label={`Writing ${p.label}`}>
-                      {p.tasks.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </optgroup>
-                  ))}
-                </Select>
+                <Label>Image filename <span className="text-slate-400 font-normal">(optional)</span></Label>
+                <Input
+                  placeholder="e.g. chart_traffic_2024.png"
+                  value={form.image_path}
+                  onChange={(e) => setForm({ ...form, image_path: e.target.value })}
+                />
+                <p className="text-xs text-slate-400">Storage filename only — no full URL needed.</p>
+                {/* Live image preview */}
+                {getImageUrl(form.image_path) && (
+                  <div className="mt-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                    <p className="px-3 py-1.5 text-xs font-medium text-slate-500 border-b border-slate-200">Image Preview</p>
+                    <div className="p-3 flex justify-center">
+                      <img
+                        src={getImageUrl(form.image_path)!}
+                        alt="preview"
+                        className="max-h-48 max-w-full rounded object-contain cursor-zoom-in"
+                        onClick={() => setLightboxUrl(getImageUrl(form.image_path))}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                          (e.target as HTMLImageElement).insertAdjacentHTML("afterend", '<p class="text-xs text-red-500 text-center">Image not found in storage</p>');
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="space-y-1.5">
-                <Label>Difficulty</Label>
-                <Select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}>
-                  {DIFFICULTY_LEVELS.map((l) => <option key={l} value={l} className="capitalize">{l}</option>)}
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>Max Score</Label>
-                <Input type="number" min={1} value={form.max_score} onChange={(e) => setForm({ ...form, max_score: parseInt(e.target.value) || 1 })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Word Limit</Label>
-                <Input type="number" min={1} value={form.word_limit} onChange={(e) => setForm({ ...form, word_limit: parseInt(e.target.value) || 0 })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Time (mins)</Label>
-                <Input type="number" min={1} value={form.time_limit} onChange={(e) => setForm({ ...form, time_limit: parseInt(e.target.value) || 0 })} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Prompt / Passage</Label>
-              <Textarea placeholder="Writing prompt or passage..." rows={5} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={form.is_published} onCheckedChange={(val) => setForm({ ...form, is_published: val })} />
-              <Label>Published</Label>
-            </div>
+            )}
+            {saveError && (
+              <p className="text-xs text-red-600">
+                Error: {(saveError as Error)?.message ?? "Save failed"}
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate({ ...form, id: editRow?.id })} disabled={!form.title || saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : editRow ? "Save Changes" : "Add Question"}
+            <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!form.question_text.trim() || isSaving}
+            >
+              {isSaving ? "Saving…" : editRow ? "Save Changes" : "Add Question"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      {/* Lightbox */}
+      {lightboxUrl && <Lightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Question?</DialogTitle></DialogHeader>
-          <p className="text-sm text-slate-500">This action cannot be undone.</p>
+          <DialogHeader>
+            <DialogTitle>Delete Question?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            This will permanently remove the question. This action cannot be undone.
+          </p>
+          {deleteError && (
+            <p className="text-xs text-red-600">
+              Error: {(deleteError as Error)?.message ?? "Delete failed"}
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
+            <Button variant="outline" onClick={() => setDeleteId(null)} disabled={deleteMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              disabled={deleteMutation.isPending}
+            >
               {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
