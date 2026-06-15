@@ -1,4 +1,4 @@
-/** Proxies /api/* → Railway BACKEND_URL (same-origin, no browser CORS). */
+/** Proxies /api/v1/* → Railway BACKEND_URL/api/v1/* */
 module.exports = async function handler(req, res) {
   const backend = process.env.BACKEND_URL?.replace(/\/$/, "");
   if (!backend) {
@@ -9,9 +9,9 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const slug = req.query.slug;
-  const segments = Array.isArray(slug) ? slug : slug ? [slug] : [];
-  const apiPath = `/api/${segments.join("/")}`;
+  const pathParts = req.query.path;
+  const segments = Array.isArray(pathParts) ? pathParts : pathParts ? [pathParts] : [];
+  const apiPath = `/api/v1/${segments.join("/")}`;
 
   const queryIndex = req.url?.indexOf("?") ?? -1;
   const queryString = queryIndex >= 0 ? req.url.slice(queryIndex) : "";
