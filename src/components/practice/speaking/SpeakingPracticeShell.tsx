@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, PenLine, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mic, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { partBadge, PracticePartHeaderBanner } from "@/components/practice/PracticePartHeaderBanner";
-import { WRITING_INSTRUCTIONS, WRITING_PART_TITLES } from "@/lib/writingInstructions";
+import { SPEAKING_INSTRUCTIONS, SPEAKING_PART_TITLES } from "@/lib/speakingInstructions";
 
 type Props = {
   activePart: string;
@@ -10,24 +10,18 @@ type Props = {
   totalSets?: number;
   onPrevious?: () => void;
   onNext?: () => void;
-  layout?: "single" | "split";
-  compactBanner?: boolean;
-  leftPanel?: ReactNode;
-  rightPanel?: ReactNode;
-  children?: ReactNode;
+  sidebar?: ReactNode;
+  children: ReactNode;
   footer?: ReactNode;
 };
 
-export function WritingPracticeShell({
+export function SpeakingPracticeShell({
   activePart,
   setIndex = 1,
   totalSets = 1,
   onPrevious,
   onNext,
-  layout = "single",
-  compactBanner = false,
-  leftPanel,
-  rightPanel,
+  sidebar,
   children,
   footer,
 }: Props) {
@@ -35,30 +29,22 @@ export function WritingPracticeShell({
   const hasNext = setIndex < totalSets;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-t border-slate-200 bg-white">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-4 py-3 md:px-6">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-slate-200 bg-white">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-4 py-3 md:px-6">
         <div className="flex items-center gap-2">
           <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500">
             <Sparkles className="size-4 text-white" />
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-400">PrepSmart LC</p>
-            <p className="text-sm font-bold text-white">
-              LanguageCert Academic — Writing
-              {compactBanner && (
-                <span className="font-medium text-white/70">
-                  {" "}
-                  · Part {activePart} — {WRITING_PART_TITLES[activePart] ?? "Practice"}
-                </span>
-              )}
-            </p>
+            <p className="text-sm font-bold text-white">LanguageCert Academic — Speaking</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-2 text-xs text-white/60 sm:flex">
-            <PenLine className="size-3.5" />
+            <Mic className="size-3.5" />
             <span>
-              Set {setIndex} / {totalSets}
+              Question {setIndex} / {totalSets}
             </span>
           </div>
           <Button
@@ -84,15 +70,14 @@ export function WritingPracticeShell({
 
       <div className="flex h-full min-h-0 flex-1 flex-col md:flex-row">
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-          {!compactBanner && (
-            <div className="shrink-0 space-y-3 border-b border-slate-100 px-4 py-4 md:px-6">
+            <div className="shrink-0 space-y-2 border-b border-slate-100 px-4 py-3 md:px-6">
               <PracticePartHeaderBanner
-                module="writing"
-                partLabel={`Writing Part ${activePart}`}
-                title={WRITING_PART_TITLES[activePart] ?? "Writing Practice"}
-                instructions={WRITING_INSTRUCTIONS[activePart]}
-                badge={partBadge("writing", activePart)}
-                icon={PenLine}
+                module="speaking"
+                partLabel={`Speaking Part ${activePart}`}
+                title={SPEAKING_PART_TITLES[activePart] ?? "Speaking Practice"}
+                instructions={SPEAKING_INSTRUCTIONS[activePart]}
+                badge={partBadge("speaking", activePart)}
+                icon={Mic}
               />
               <div className="flex items-center justify-end gap-1 sm:hidden">
                 <Button type="button" variant="ghost" size="sm" disabled={!hasPrev} onClick={onPrevious} className="h-8 px-2">
@@ -106,27 +91,17 @@ export function WritingPracticeShell({
                 </Button>
               </div>
             </div>
-          )}
 
-          {layout === "split" ? (
-            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
-              <div className="min-h-[280px] overflow-y-auto border-b border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100/80 p-4 md:p-5 lg:border-b-0 lg:border-r">
-                {leftPanel}
-              </div>
-              <div className="flex min-h-[360px] flex-col overflow-hidden bg-white p-4 md:p-5">
-                {rightPanel}
-              </div>
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col p-4 md:p-6">{children}</div>
-          )}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">{children}</div>
 
-          {footer && (
-            <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-6">
-              {footer}
-            </div>
-          )}
-        </main>
+            {footer && (
+              <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 md:px-6">
+                {footer}
+              </div>
+            )}
+          </main>
+
+          {sidebar}
       </div>
     </div>
   );

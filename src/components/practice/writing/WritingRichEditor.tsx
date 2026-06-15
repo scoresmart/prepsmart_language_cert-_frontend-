@@ -10,6 +10,9 @@ type Props = {
   disabled?: boolean;
   resetKey?: string;
   placeholder?: string;
+  className?: string;
+  fillHeight?: boolean;
+  variant?: "default" | "workspace";
 };
 
 function countWords(text: string): number {
@@ -25,6 +28,9 @@ export function WritingRichEditor({
   disabled = false,
   resetKey = "",
   placeholder = "Write your response here…",
+  className,
+  fillHeight = false,
+  variant = "default",
 }: Props) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const [history, setHistory] = React.useState<string[]>([""]);
@@ -78,8 +84,24 @@ export function WritingRichEditor({
   }, [resetKey]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-      <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-100 px-2 py-1.5">
+    <div
+      className={cn(
+        "overflow-hidden bg-white",
+        variant === "workspace"
+          ? "rounded-xl border border-slate-200"
+          : "rounded-lg border border-slate-300",
+        fillHeight && "flex h-full min-h-0 flex-col",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-1 border-b px-2 py-1.5",
+          variant === "workspace"
+            ? "border-slate-200 bg-gradient-to-r from-slate-50 to-white"
+            : "border-slate-200 bg-slate-100",
+        )}
+      >
         <ToolbarBtn label="Undo" disabled={disabled || historyIndex <= 0} onClick={() => applyHistory(historyIndex - 1)}>
           <Undo2 className="size-4" />
         </ToolbarBtn>
@@ -102,7 +124,8 @@ export function WritingRichEditor({
         </ToolbarBtn>
         <span
           className={cn(
-            "ml-auto text-xs font-medium tabular-nums",
+            "ml-auto rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums",
+            variant === "workspace" && "bg-white/80",
             wordCount === 0
               ? "text-slate-400"
               : wordCount > maxWords
@@ -112,7 +135,7 @@ export function WritingRichEditor({
                   : "text-slate-600",
           )}
         >
-          Words: {wordCount}
+          {wordCount} words
         </span>
       </div>
       <div
@@ -122,19 +145,23 @@ export function WritingRichEditor({
         onInput={handleInput}
         data-placeholder={placeholder}
         className={cn(
-          "min-h-[320px] px-4 py-4 text-sm leading-relaxed text-slate-800 outline-none md:min-h-[400px]",
+          "px-4 py-4 text-[15px] leading-7 text-slate-800 outline-none",
+          fillHeight ? "min-h-[200px] flex-1" : "min-h-[320px] md:min-h-[400px]",
+          variant === "workspace" && "bg-white",
           "empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)]",
           disabled && "cursor-not-allowed bg-slate-50 text-slate-500",
         )}
       />
-      <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
-        Write between {minWords} and {maxWords} words.
-        {wordCount > 0 && (
-          <span className={cn("ml-2 font-medium", inRange ? "text-emerald-600" : "text-slate-600")}>
-            ({wordCount} / {minWords}–{maxWords})
-          </span>
-        )}
-      </div>
+      {variant === "default" && (
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+          Write between {minWords} and {maxWords} words.
+          {wordCount > 0 && (
+            <span className={cn("ml-2 font-medium", inRange ? "text-emerald-600" : "text-slate-600")}>
+              ({wordCount} / {minWords}–{maxWords})
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

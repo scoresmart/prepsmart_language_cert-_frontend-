@@ -1,12 +1,19 @@
-import { api, type ListeningQuestion, type WritingQuestion } from "@/lib/api";
+import { api, type ListeningQuestion, type SpeakingQuestion, type WritingQuestion } from "@/lib/api";
+import { LISTENING_PARTS } from "@/lib/listeningInstructions";
+import { READING_PARTS } from "@/lib/readingInstructions";
+import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
+import { SPEAKING_PARTS } from "@/lib/speakingInstructions";
+import { WRITING_PARTS } from "@/lib/writingInstructions";
 
 export type PracticeSection = "writing" | "reading" | "listening" | "speaking";
+
+export type { SpeakingQuestion } from "@/lib/api";
 
 export type PracticeQuestionItem = {
   id: string;
   index: number;
   title: string;
-  raw: WritingQuestion | ListeningQuestion;
+  raw: WritingQuestion | ListeningQuestion | SpeakingQuestion;
 };
 
 const READING_TASK_MAP: Record<string, string> = {
@@ -30,6 +37,7 @@ export function getQuestionType(section: string, part: string): string {
   if (section === "writing") return part === "1" ? "writing_task1" : "writing_task2";
   if (section === "reading") return READING_TASK_MAP[part] ?? "reading_part_1a";
   if (section === "listening") return `listening_part_${part}`;
+  if (section === "speaking") return `speaking_part_${part}`;
   return section;
 }
 
@@ -89,6 +97,13 @@ export function getPartLabel(section: string, part: string): string {
   return `Part ${part}`;
 }
 
+export function getModulePartLinks(section: PracticeSection): { part: string; label: string }[] {
+  if (section === "speaking") return SPEAKING_PARTS.map((p) => ({ part: p.part, label: p.label }));
+  if (section === "writing") return WRITING_PARTS.map((p) => ({ part: p.part, label: p.label }));
+  if (section === "reading") return READING_PARTS.map((p) => ({ part: p.part, label: p.label }));
+  return LISTENING_PARTS.map((p) => ({ part: String(p.part), label: p.label }));
+}
+
 export async function fetchPracticeQuestions(
   section: string,
   part: string,
@@ -127,6 +142,21 @@ export async function fetchPracticeQuestions(
       title: getQuestionTitle(q, section, i + 1),
       raw: q,
     }));
+  }
+
+  if (section === "speaking") {
+    const partNum = parseInt(part, 10) || 1;
+    const res = await api.speaking.list({ part_number: partNum });
+    const rows = res.data ?? [];
+    return rows.map((q, i) => {
+      const normalized = normalizeSpeakingQuestion(q, i + 1);
+      return {
+        id: normalized.id,
+        index: i + 1,
+        title: normalized.title,
+        raw: normalized,
+      };
+    });
   }
 
   return [];

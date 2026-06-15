@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, LayoutList } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import { getPartLabel, getSectionLabel } from "@/lib/practiceQuestions";
 import { moduleUrl } from "@/lib/practiceRoutes";
 import { difficultyLabel } from "@/lib/practiceNavigation";
 import { Badge } from "@/components/ui/badge";
+
 type Props = {
   module: string;
   part: string;
@@ -12,7 +12,6 @@ type Props = {
   totalQuestions: number;
   practicedCount: number;
   pendingCount: number;
-  onOpenNavigator: () => void;
 };
 
 export function PracticeWorkspaceBar({
@@ -22,7 +21,6 @@ export function PracticeWorkspaceBar({
   totalQuestions,
   practicedCount,
   pendingCount,
-  onOpenNavigator,
 }: Props) {
   const difficulty = difficultyLabel(questionIndex);
 
@@ -54,15 +52,6 @@ export function PracticeWorkspaceBar({
             {" · "}
             <span className="font-medium text-amber-600">{pendingCount} pending</span>
           </span>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onOpenNavigator}
-            className="gap-2 bg-violet-600 hover:bg-violet-700"
-          >
-            <LayoutList className="size-4" />
-            Question Navigator
-          </Button>
         </div>
       </div>
     </header>

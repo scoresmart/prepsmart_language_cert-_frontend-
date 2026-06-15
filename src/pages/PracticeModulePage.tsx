@@ -54,13 +54,8 @@ export function PracticeModulePage() {
         </div>
       </header>
 
-      {module === "speaking" ? (
-        <div className="rounded-xl border border-dashed bg-slate-50 py-16 text-center text-slate-500">
-          <p className="text-sm font-medium">Speaking practice coming soon.</p>
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {sectionMeta.parts.map((p) => (
+      <ul className="space-y-3">
+        {sectionMeta.parts.map((p) => (
             <li key={p.part}>
               <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
@@ -69,6 +64,7 @@ export function PracticeModulePage() {
                 <div className="p-4">
                   <Link
                     to={partStartUrl(module, p.part)}
+                    state={{ openNavigator: true }}
                     className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-cyan-600 hover:to-emerald-600"
                   >
                     Start practicing
@@ -78,8 +74,7 @@ export function PracticeModulePage() {
               </div>
             </li>
           ))}
-        </ul>
-      )}
+      </ul>
     </div>
   );
 }

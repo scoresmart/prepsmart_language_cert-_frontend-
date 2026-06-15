@@ -113,6 +113,7 @@ export function LCPracticeDropdown({ align = "center", triggerVariant = "nav", c
                   <Link
                     key={part.to}
                     to={part.to}
+                    state={{ openNavigator: true }}
                     onClick={() => { setOpen(false); setHovering(false); }}
                     className="group/item block rounded-lg px-2 py-1.5 text-xs text-white/55 transition-all duration-200 hover:translate-x-1 hover:bg-white/10 hover:text-white"
                     style={{ transitionDelay: `${pi * 20}ms` }}

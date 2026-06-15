@@ -19,6 +19,11 @@ import {
 } from "@/components/practice/reading/ReadingDragDrop";
 import { ReadingStatementSelect } from "@/components/practice/reading/ReadingTextSelect";
 import { WritingPracticeShell } from "@/components/practice/writing/WritingPracticeShell";
+import {
+  WritingPart1AnswerPanel,
+  WritingPart1Footer,
+  WritingPart1TaskPanel,
+} from "@/components/practice/writing/WritingPart1SplitView";
 import { WritingRichEditor } from "@/components/practice/writing/WritingRichEditor";
 import { WRITING_WORD_LIMITS } from "@/lib/writingInstructions";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
@@ -116,7 +121,6 @@ function ResultsScreen({ score, total, onRetry, children }: ResultsScreenProps) 
 type WritingNavProps = {
   setIndex?: number;
   totalSets?: number;
-  onOpenNavigator?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -129,7 +133,6 @@ export function WritingRunner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -190,14 +193,58 @@ export function WritingRunner({
   const { min: minWords, max: maxWords } = limits;
   const canSubmit = wordCount >= minWords && wordCount <= maxWords;
 
+  const shellProps = {
+    activePart: part,
+    setIndex: setIndex ?? questionIndex,
+    totalSets,
+    onPrevious,
+    onNext,
+  };
+
+  if (part === "1") {
+    return (
+      <WritingPracticeShell
+        {...shellProps}
+        layout="split"
+        compactBanner
+        leftPanel={
+          <WritingPart1TaskPanel
+            imageUrl={imageUrl}
+            questionText={question.question_text}
+            minWords={minWords}
+            maxWords={maxWords}
+          />
+        }
+        rightPanel={
+          <WritingPart1AnswerPanel
+            minWords={minWords}
+            maxWords={maxWords}
+            wordCount={wordCount}
+            text={text}
+            submitted={submitted}
+            attemptKey={`${question.id}-${attemptKey}`}
+            onChange={setText}
+            onRetry={handleRetry}
+          />
+        }
+        footer={
+          !submitted ? (
+            <WritingPart1Footer
+              wordCount={wordCount}
+              minWords={minWords}
+              maxWords={maxWords}
+              canSubmit={canSubmit}
+              onSubmit={handleSubmit}
+            />
+          ) : undefined
+        }
+      />
+    );
+  }
+
   return (
     <WritingPracticeShell
-      activePart={part}
-      setIndex={setIndex ?? questionIndex}
-      totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
-      onPrevious={onPrevious}
-      onNext={onNext}
+      {...shellProps}
       footer={
         !submitted ? (
           <Button
@@ -249,14 +296,11 @@ export function WritingRunner({
   );
 }
 
-// ── Reading Part 1A — Synonym Selection ───────────────────────────────────────
-
 type Q1A = { questionText: string; options: string[]; correctAnswer: number };
 
 type ReadingNavProps = {
   setIndex?: number;
   totalSets?: number;
-  onOpenNavigator?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -267,7 +311,6 @@ function Reading1ARunner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -295,7 +338,6 @@ function Reading1ARunner({
       activePart="1a"
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       footer={
@@ -338,7 +380,6 @@ function Reading1BRunner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -403,7 +444,6 @@ function Reading1BRunner({
       layout="split"
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       leftPanel={leftPanel}
@@ -428,7 +468,6 @@ function Reading2Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -546,7 +585,6 @@ function Reading2Runner({
       layout="split"
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       leftPanel={leftPanel}
@@ -574,7 +612,6 @@ function Reading3Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -632,7 +669,6 @@ function Reading3Runner({
       layout="split"
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       leftPanel={leftPanel}
@@ -661,7 +697,6 @@ function Reading4Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -718,7 +753,6 @@ function Reading4Runner({
       layout="split"
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       leftPanel={leftPanel}
@@ -742,7 +776,6 @@ export function ReadingSection({
   attemptKey = 0,
   totalSets,
   onRetry,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -752,7 +785,6 @@ export function ReadingSection({
   attemptKey?: number;
   totalSets?: number;
   onRetry?: () => void;
-  onOpenNavigator?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -784,7 +816,6 @@ export function ReadingSection({
   const navProps: ReadingNavProps = {
     setIndex: questionIndex,
     totalSets: totalSets ?? questions.length,
-    onOpenNavigator,
     onPrevious,
     onNext,
     onAttemptSaved,
@@ -805,7 +836,6 @@ type L1Item = { optionA: string; optionB: string; optionC: string; correctAnswer
 type ListeningNavProps = {
   setIndex?: number;
   totalSets?: number;
-  onOpenNavigator?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -816,7 +846,6 @@ function Listening1Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -847,7 +876,6 @@ function Listening1Runner({
       audioUrl={audioUrl}
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       footer={
@@ -892,7 +920,6 @@ function Listening2Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -928,7 +955,6 @@ function Listening2Runner({
       audioUrl={audioUrl}
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       footer={
@@ -982,7 +1008,6 @@ function Listening3Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -1019,7 +1044,6 @@ function Listening3Runner({
       audioUrl={audioUrl}
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       footer={
@@ -1082,7 +1106,6 @@ function Listening4Runner({
   onRetry,
   setIndex,
   totalSets,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -1115,7 +1138,6 @@ function Listening4Runner({
       audioUrl={audioUrl}
       setIndex={setIndex}
       totalSets={totalSets}
-      onOpenNavigator={onOpenNavigator}
       onPrevious={onPrevious}
       onNext={onNext}
       footer={
@@ -1159,7 +1181,6 @@ export function ListeningSection({
   totalSets,
   attemptKey = 0,
   onRetry,
-  onOpenNavigator,
   onPrevious,
   onNext,
   onAttemptSaved,
@@ -1169,7 +1190,6 @@ export function ListeningSection({
   totalSets?: number;
   attemptKey?: number;
   onRetry?: () => void;
-  onOpenNavigator?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -1190,7 +1210,6 @@ export function ListeningSection({
   const navProps: ListeningNavProps = {
     setIndex: questionIndex,
     totalSets: totalSets ?? questions.length,
-    onOpenNavigator,
     onPrevious,
     onNext,
     onAttemptSaved,

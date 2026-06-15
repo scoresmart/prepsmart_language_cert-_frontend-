@@ -18,3 +18,6 @@ export const LISTENING_PART_TITLES: Record<number, string> = {
   3: "Note Completion",
   4: "Extended Discussion",
 };
+
+/** Seconds to prepare before listening audio auto-plays. */
+export const LISTENING_PREP_SECONDS = 2;

@@ -1,19 +1,12 @@
 import type { ReactNode } from "react";
 
-import { Link } from "react-router-dom";
-
-import { ChevronLeft, ChevronRight, Headphones, LayoutList, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Headphones, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { cn } from "@/lib/utils";
-
-import { LISTENING_INSTRUCTIONS, LISTENING_PARTS, LISTENING_PART_TITLES } from "@/lib/listeningInstructions";
-
-import { partStartUrl } from "@/lib/practiceRoutes";
+import { LISTENING_INSTRUCTIONS, LISTENING_PART_TITLES } from "@/lib/listeningInstructions";
 
 import { partBadge, PracticePartHeaderBanner } from "@/components/practice/PracticePartHeaderBanner";
-
 import { ListeningAudioPlayer } from "./ListeningAudioPlayer";
 
 
@@ -23,12 +16,11 @@ type Props = {
   activePart: number;
 
   audioUrl: string | null;
+  audioResetKey?: string;
 
   setIndex?: number;
 
   totalSets?: number;
-
-  onOpenNavigator?: () => void;
 
   onPrevious?: () => void;
 
@@ -47,12 +39,11 @@ export function ListeningPracticeShell({
   activePart,
 
   audioUrl,
+  audioResetKey,
 
   setIndex = 1,
 
   totalSets = 1,
-
-  onOpenNavigator,
 
   onPrevious,
 
@@ -98,30 +89,6 @@ export function ListeningPracticeShell({
 
         <div className="flex items-center gap-2">
 
-          {onOpenNavigator && (
-
-            <Button
-
-              type="button"
-
-              size="sm"
-
-              variant="secondary"
-
-              onClick={onOpenNavigator}
-
-              className="hidden h-8 gap-1.5 bg-white/10 text-white hover:bg-white/20 sm:flex"
-
-            >
-
-              <LayoutList className="size-3.5" />
-
-              Navigator
-
-            </Button>
-
-          )}
-
           <div className="hidden sm:flex items-center gap-2 text-xs text-white/60">
 
             <Headphones className="size-3.5" />
@@ -140,87 +107,8 @@ export function ListeningPracticeShell({
 
 
 
-      <div className="flex flex-1 flex-col md:flex-row min-h-0">
-
-        <aside className="shrink-0 border-b border-slate-200 bg-slate-50 md:w-52 md:border-b-0 md:border-r">
-
-          <nav className="flex md:flex-col overflow-x-auto md:overflow-visible">
-
-            {LISTENING_PARTS.map(({ part, label }) => {
-
-              const active = part === activePart;
-
-              return (
-
-                <Link
-
-                  key={part}
-
-                  to={partStartUrl("listening", String(part))}
-
-                  className={cn(
-
-                    "relative flex shrink-0 items-center px-4 py-3.5 text-sm font-medium transition md:px-5",
-
-                    active
-
-                      ? "bg-slate-700 text-white md:bg-slate-600"
-
-                      : "text-slate-600 hover:bg-slate-100",
-
-                  )}
-
-                >
-
-                  {label}
-
-                  {active && (
-
-                    <span
-
-                      className="absolute right-0 top-1/2 hidden size-0 -translate-y-1/2 border-y-[10px] border-y-transparent border-l-[10px] border-l-slate-600 md:block"
-
-                      aria-hidden
-
-                    />
-
-                  )}
-
-                </Link>
-
-              );
-
-            })}
-
-          </nav>
-
-          {onOpenNavigator && (
-
-            <div className="hidden border-t border-slate-200 p-3 md:block">
-
-              <button
-
-                type="button"
-
-                onClick={onOpenNavigator}
-
-                className="text-left text-xs font-medium text-cyan-700 hover:text-cyan-900"
-
-              >
-
-                View all question sets →
-
-              </button>
-
-            </div>
-
-          )}
-
-        </aside>
-
-
-
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex h-full min-h-0 flex-1 flex-col md:flex-row">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
 
           <div className="shrink-0 space-y-3 border-b border-slate-100 px-4 py-4 md:px-8">
             <PracticePartHeaderBanner
@@ -241,11 +129,6 @@ export function ListeningPracticeShell({
               <Button type="button" variant="ghost" size="sm" disabled={!hasNext} onClick={onNext} className="h-8 px-2">
                 <ChevronRight className="size-4" />
               </Button>
-              {onOpenNavigator && (
-                <Button type="button" variant="outline" size="sm" onClick={onOpenNavigator} className="ml-1 h-8">
-                  <LayoutList className="size-3.5" />
-                </Button>
-              )}
             </div>
           </div>
 
@@ -255,7 +138,7 @@ export function ListeningPracticeShell({
 
             {audioUrl ? (
 
-              <ListeningAudioPlayer src={audioUrl} />
+              <ListeningAudioPlayer src={audioUrl} resetKey={audioResetKey ?? audioUrl} />
 
             ) : (
 
@@ -267,7 +150,7 @@ export function ListeningPracticeShell({
 
 
 
-          <div className="flex-1 space-y-4 p-4 md:p-8 md:pt-6">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col space-y-4 p-4 md:p-8 md:pt-6">{children}</div>
 
 
 

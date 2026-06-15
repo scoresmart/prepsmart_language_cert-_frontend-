@@ -1,8 +1,14 @@
 import * as React from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
 import { PracticeMyAttemptsSection } from "@/components/practice/PracticeMyAttemptsSection";
+import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab";
+import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
+import {
+  SpeakingPracticeProvider,
+  SpeakingSidebarPanel,
+} from "@/components/practice/speaking/SpeakingPracticeContext";
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
 import { usePracticeAttempts, usePracticeQuestions } from "@/hooks/usePracticeQuestions";
@@ -19,6 +25,7 @@ import {
   ReadingSection,
   WritingRunner,
 } from "@/pages/PracticeSectionPage";
+import { SpeakingSection } from "@/pages/SpeakingSection";
 
 export function PracticeQuestionPage() {
   const { module = "", partSlug = "", questionIndex: indexParam } = useParams<{
@@ -27,6 +34,7 @@ export function PracticeQuestionPage() {
     questionIndex: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const part = slugToPart(partSlug) ?? "";
   const questionIndex = parseQuestionIndex(indexParam);
   const [navOpen, setNavOpen] = React.useState(false);
@@ -44,6 +52,14 @@ export function PracticeQuestionPage() {
   const currentQuestion = questions[questionIndex - 1];
 
   const clampedIndex = total > 0 ? Math.min(Math.max(1, questionIndex), total) : questionIndex;
+
+  React.useEffect(() => {
+    const state = location.state as { openNavigator?: boolean } | null;
+    if (state?.openNavigator) {
+      setNavOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   React.useEffect(() => {
     if (!isPracticeModule(module) || !part) return;
@@ -65,10 +81,6 @@ export function PracticeQuestionPage() {
     return <Navigate to="/practice" replace />;
   }
 
-  if (module === "speaking") {
-    return <Navigate to={moduleUrl(module)} replace />;
-  }
-
   if (isLoading) {
     return (
       <PracticeWorkspaceLayout>
@@ -81,11 +93,32 @@ export function PracticeQuestionPage() {
   }
 
   if (total === 0) {
-    return <Navigate to={moduleUrl(module)} replace />;
+    return (
+      <PracticeWorkspaceLayout>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-lg font-semibold text-slate-800">No speaking questions yet</p>
+          <p className="max-w-md text-sm text-slate-500">
+            {module === "speaking"
+              ? `Add and publish speaking questions for Part ${part} in Admin → Speaking, then return here.`
+              : "No questions are available for this part yet."}
+          </p>
+          <a
+            href={moduleUrl(module)}
+            className="text-sm font-medium text-cyan-700 hover:text-cyan-900"
+          >
+            ← Back to {getSectionLabel(module)}
+          </a>
+        </div>
+      </PracticeWorkspaceLayout>
+    );
   }
 
   const sectionLabel = getSectionLabel(module);
   const partLabel = getPartLabel(module, part);
+  const questionFrameClass =
+    module === "speaking" || (module === "writing" && part === "1")
+      ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
+      : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
 
   return (
     <PracticeWorkspaceLayout>
@@ -96,8 +129,9 @@ export function PracticeQuestionPage() {
         totalQuestions={total}
         practicedCount={practicedCount}
         pendingCount={pendingCount}
-        onOpenNavigator={() => setNavOpen(true)}
       />
+
+      <PracticeNavigatorTab open={navOpen} onOpen={() => setNavOpen(true)} />
 
       <QuestionNavigatorPanel
         open={navOpen}
@@ -110,60 +144,83 @@ export function PracticeQuestionPage() {
         onSelect={goTo}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {module === "listening" && (
-            <ListeningSection
-              part={part}
-              questionIndex={clampedIndex}
-              totalSets={total}
-              attemptKey={attemptKey}
-              onRetry={() => setAttemptKey((k) => k + 1)}
-              onOpenNavigator={() => setNavOpen(true)}
-              onPrevious={() => goTo(clampedIndex - 1)}
-              onNext={() => goTo(clampedIndex + 1)}
-              onAttemptSaved={handleAttemptSaved}
-            />
-          )}
-          {module === "reading" && (
-            <ReadingSection
-              part={part}
-              questionIndex={clampedIndex}
-              totalSets={total}
-              attemptKey={attemptKey}
-              onRetry={() => setAttemptKey((k) => k + 1)}
-              onOpenNavigator={() => setNavOpen(true)}
-              onPrevious={() => goTo(clampedIndex - 1)}
-              onNext={() => goTo(clampedIndex + 1)}
-              onAttemptSaved={handleAttemptSaved}
-            />
-          )}
-          {module === "writing" && (
-            <WritingRunner
-              part={part}
-              questionIndex={clampedIndex}
-              totalSets={total}
-              attemptKey={attemptKey}
-              onRetry={() => setAttemptKey((k) => k + 1)}
-              setIndex={clampedIndex}
-              onOpenNavigator={() => setNavOpen(true)}
-              onPrevious={() => goTo(clampedIndex - 1)}
-              onNext={() => goTo(clampedIndex + 1)}
-              onAttemptSaved={handleAttemptSaved}
-            />
-          )}
-        </div>
+      <SpeakingPracticeProvider>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+          <PracticePartSidebar onOpenNavigator={() => setNavOpen(true)} />
 
-        <div className="max-h-[38vh] shrink-0 overflow-y-auto border-t border-slate-200 bg-slate-50 px-4 py-4 md:px-6">
-          <PracticeMyAttemptsSection
-            module={module}
-            questions={questions}
-            attempts={attemptsQ.data ?? []}
-            currentQuestionId={currentQuestion?.id}
-            onSelectQuestion={goTo}
-          />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className={questionFrameClass}>
+                  {module === "listening" && (
+                  <ListeningSection
+                    part={part}
+                    questionIndex={clampedIndex}
+                    totalSets={total}
+                    attemptKey={attemptKey}
+                    onRetry={() => setAttemptKey((k) => k + 1)}
+                    onPrevious={() => goTo(clampedIndex - 1)}
+                    onNext={() => goTo(clampedIndex + 1)}
+                    onAttemptSaved={handleAttemptSaved}
+                  />
+                )}
+                {module === "reading" && (
+                  <ReadingSection
+                    part={part}
+                    questionIndex={clampedIndex}
+                    totalSets={total}
+                    attemptKey={attemptKey}
+                    onRetry={() => setAttemptKey((k) => k + 1)}
+                    onPrevious={() => goTo(clampedIndex - 1)}
+                    onNext={() => goTo(clampedIndex + 1)}
+                    onAttemptSaved={handleAttemptSaved}
+                  />
+                )}
+                {module === "writing" && (
+                  <div className="h-full min-h-0">
+                    <WritingRunner
+                      part={part}
+                      questionIndex={clampedIndex}
+                      totalSets={total}
+                      attemptKey={attemptKey}
+                      onRetry={() => setAttemptKey((k) => k + 1)}
+                      setIndex={clampedIndex}
+                      onPrevious={() => goTo(clampedIndex - 1)}
+                      onNext={() => goTo(clampedIndex + 1)}
+                      onAttemptSaved={handleAttemptSaved}
+                    />
+                  </div>
+                )}
+                {module === "speaking" && (
+                  <div className="h-full min-h-0">
+                    <SpeakingSection
+                      part={part}
+                      questionIndex={clampedIndex}
+                      totalSets={total}
+                      attemptKey={attemptKey}
+                      onRetry={() => setAttemptKey((k) => k + 1)}
+                      onPrevious={() => goTo(clampedIndex - 1)}
+                      onNext={() => goTo(clampedIndex + 1)}
+                      onAttemptSaved={handleAttemptSaved}
+                    />
+                  </div>
+                  )}
+                </div>
+
+                <PracticeMyAttemptsSection
+                  module={module}
+                  questions={questions}
+                  attempts={attemptsQ.data ?? []}
+                  currentQuestionId={currentQuestion?.id}
+                  onSelectQuestion={goTo}
+                />
+              </div>
+            </div>
+
+            {module === "speaking" && <SpeakingSidebarPanel />}
+          </div>
         </div>
-      </div>
+      </SpeakingPracticeProvider>
     </PracticeWorkspaceLayout>
   );
 }

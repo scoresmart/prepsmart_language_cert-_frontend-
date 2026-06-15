@@ -1,11 +1,13 @@
 /**
  * Backend API client for PrepSmart Language Cert backend.
- * Base URL is read from VITE_API_URL env variable.
+ * Local: VITE_API_URL or http://localhost:5000/api/v1
+ * Production: /api/v1 (Vercel proxy → Railway BACKEND_URL)
  */
 
 import { supabase } from "./supabase/client";
+import { getApiBaseUrl, isProductionMisconfigured } from "./apiConfig";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const BASE_URL = getApiBaseUrl();
 
 async function getHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
@@ -17,12 +19,34 @@ async function getHeaders(): Promise<HeadersInit> {
 }
 
 async function request<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  if (isProductionMisconfigured()) {
+    throw new Error(
+      "Production API is misconfigured (localhost URL). Set VITE_API_URL=/api/v1 on Vercel or remove it to use the proxy.",
+    );
+  }
+
   const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: { ...headers, ...((options.headers as object) || {}) },
-  });
-  const json = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: { ...headers, ...((options.headers as object) || {}) },
+    });
+  } catch (error) {
+    const hint =
+      import.meta.env.PROD && BASE_URL.startsWith("/")
+        ? " Check Vercel env BACKEND_URL points to your live Railway domain."
+        : " Is the backend running on port 5000?";
+    throw new Error(`Network error calling API${hint} (${error instanceof Error ? error.message : String(error)})`);
+  }
+
+  let json: { message?: string };
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Invalid API response (${res.status}) from ${BASE_URL}${path}`);
+  }
+
   if (!res.ok) throw new Error(json.message || "Request failed");
   return json as T;
 }
@@ -107,6 +131,20 @@ export interface ReadingQuestion {
   created_by: string | null;
   created_at: string;
   updated_at: string | null;
+}
+
+export interface SpeakingQuestion {
+  id: string;
+  part_number: number;
+  task_type: string;
+  title: string;
+  level: string;
+  content: string | null;
+  audio_url: string | null;
+  image_url: string | null;
+  max_score: number;
+  is_published: boolean;
+  created_at: string;
 }
 
 export interface MockTest {
@@ -589,6 +627,13 @@ export const api = {
       }),
     delete: (id: string) =>
       request<ApiResponse<{ message: string }>>(`/questions/listening/${id}`, { method: "DELETE" }),
+  },
+
+  // ─── Speaking Questions ───────────────────────────────────────────────────
+  speaking: {
+    list: (params?: { part_number?: number }) =>
+      request<ApiResponse<SpeakingQuestion[]>>(`/questions/speaking${qs(params)}`),
+    get: (id: string) => request<ApiResponse<SpeakingQuestion>>(`/questions/speaking/${id}`),
   },
 
   // ─── Reading Questions ────────────────────────────────────────────────────

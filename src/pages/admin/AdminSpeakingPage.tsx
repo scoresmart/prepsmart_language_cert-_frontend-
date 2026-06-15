@@ -16,6 +16,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase/client";
+import { DEFAULT_SPEAKING_TEST_AUDIO } from "@/lib/speakingAudio";
+import { SPEAKING_DEFAULT_PROMPT } from "@/lib/speakingQuestionStructure";
 
 // LanguageCert SELT Speaking task types — grouped by Part
 const SPEAKING_PARTS = [
@@ -79,7 +81,8 @@ const DIFFICULTY_LEVELS = ["A1", "A2", "B1", "B2"];
 type Question = {
   id: string;
   title: string;
-  type: string;
+  task_type: string;
+  part_number: number;
   level: string;
   max_score: number;
   is_published: boolean;
@@ -100,14 +103,19 @@ type FormData = {
   image_url: string;
 };
 
+function partNumberFromTaskType(taskType: string): number {
+  const match = taskType.match(/speaking_part_(\d+)/);
+  return match ? parseInt(match[1], 10) : 1;
+}
+
 const emptyForm: FormData = {
   title: "",
-  type: "read_aloud",
-  level: "medium",
-  max_score: 5,
+  type: "speaking_part_1_task_1",
+  level: "B1",
+  max_score: 90,
   is_published: false,
-  content: "",
-  audio_url: "",
+  content: SPEAKING_DEFAULT_PROMPT,
+  audio_url: DEFAULT_SPEAKING_TEST_AUDIO,
   image_url: "",
 };
 
@@ -124,9 +132,8 @@ export function AdminSpeakingPage() {
     queryKey: ["admin", "speaking-questions"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("questions")
-        .select("id,title,type,level,max_score,is_published,created_at,content,audio_url,image_url")
-        .eq("section", "speaking")
+        .from("speaking_part_questions")
+        .select("id,title,task_type,part_number,level,max_score,is_published,created_at,content,audio_url,image_url")
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
@@ -138,8 +145,8 @@ export function AdminSpeakingPage() {
     mutationFn: async (data: FormData & { id?: string }) => {
       const payload = {
         title: data.title,
-        type: data.type,
-        section: "speaking",
+        task_type: data.type,
+        part_number: partNumberFromTaskType(data.type),
         level: data.level,
         max_score: data.max_score,
         is_published: data.is_published,
@@ -148,10 +155,10 @@ export function AdminSpeakingPage() {
         image_url: data.image_url || null,
       };
       if (data.id) {
-        const { error } = await supabase.from("questions").update(payload).eq("id", data.id);
+        const { error } = await supabase.from("speaking_part_questions").update(payload).eq("id", data.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("questions").insert(payload);
+        const { error } = await supabase.from("speaking_part_questions").insert(payload);
         if (error) throw error;
       }
     },
@@ -166,7 +173,7 @@ export function AdminSpeakingPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("questions").delete().eq("id", id);
+      const { error } = await supabase.from("speaking_part_questions").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -178,7 +185,7 @@ export function AdminSpeakingPage() {
 
   const togglePublish = useMutation({
     mutationFn: async ({ id, val }: { id: string; val: boolean }) => {
-      const { error } = await supabase.from("questions").update({ is_published: val }).eq("id", id);
+      const { error } = await supabase.from("speaking_part_questions").update({ is_published: val }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "speaking-questions"] }),
@@ -203,7 +210,7 @@ export function AdminSpeakingPage() {
     setEditRow(row);
     setForm({
       title: row.title,
-      type: row.type,
+      type: row.task_type,
       level: row.level,
       max_score: row.max_score,
       is_published: row.is_published,
@@ -221,7 +228,7 @@ export function AdminSpeakingPage() {
       ...part,
       tasks: part.tasks.map((task) => ({
         ...task,
-        questions: rows.filter((r) => r.type === task.value && (!s || r.title.toLowerCase().includes(s))),
+        questions: rows.filter((r) => r.task_type === task.value && (!s || r.title.toLowerCase().includes(s))),
       })),
     }));
   }, [q.data, search]);

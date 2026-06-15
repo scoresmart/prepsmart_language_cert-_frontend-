@@ -10,5 +10,5 @@ export function PracticeQuestionsHubPage() {
     return <Navigate to="/practice" replace />;
   }
 
-  return <Navigate to={partStartUrl(module, part)} replace />;
+  return <Navigate to={partStartUrl(module, part)} state={{ openNavigator: true }} replace />;
 }

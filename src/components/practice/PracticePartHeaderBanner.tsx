@@ -1,12 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type PracticeModuleKind = "reading" | "writing" | "listening";
+export type PracticeModuleKind = "reading" | "writing" | "listening" | "speaking";
 
 const MODULE_GRADIENT: Record<PracticeModuleKind, string> = {
   reading: "bg-gradient-to-r from-[#ff5858] to-[#f857a6]",
   writing: "bg-gradient-to-r from-[#ff7e5f] to-[#feb47b]",
   listening: "bg-gradient-to-r from-[#f857a6] to-[#c471ed]",
+  speaking: "bg-gradient-to-r from-[#ff5858] to-[#f857a6]",
 };
 
 type Props = {
@@ -57,5 +58,6 @@ export function partBadge(module: PracticeModuleKind, part: string): string {
   const p = part.toUpperCase();
   if (module === "reading") return `R${p}`;
   if (module === "writing") return `W${p}`;
+  if (module === "speaking") return `S${p}`;
   return `L${p}`;
 }
