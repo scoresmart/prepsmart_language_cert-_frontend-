@@ -40,7 +40,7 @@ export function PracticeQuestionPage() {
   const [navOpen, setNavOpen] = React.useState(false);
   const [attemptKey, setAttemptKey] = React.useState(0);
 
-  const { questions, total, isLoading, questionType } = usePracticeQuestions(module, part);
+  const { questions, total, isLoading, isError, refetch, questionType } = usePracticeQuestions(module, part);
   const attemptsQ = usePracticeAttempts(questionType);
   const completedIds = React.useMemo(
     () => new Set((attemptsQ.data ?? []).map((a) => a.question_set_id)),
@@ -92,15 +92,43 @@ export function PracticeQuestionPage() {
     );
   }
 
+  if (isError) {
+    return (
+      <PracticeWorkspaceLayout>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-lg font-semibold text-slate-800">Could not load questions</p>
+          <p className="max-w-md text-sm text-slate-500">
+            Sign in and ensure the backend is running on port 5000, then try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="text-sm font-medium text-cyan-700 hover:text-cyan-900"
+          >
+            Retry
+          </button>
+        </div>
+      </PracticeWorkspaceLayout>
+    );
+  }
+
   if (total === 0) {
     return (
       <PracticeWorkspaceLayout>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="text-lg font-semibold text-slate-800">No speaking questions yet</p>
+          <p className="text-lg font-semibold text-slate-800">
+            No {getSectionLabel(module).toLowerCase()} questions yet
+          </p>
           <p className="max-w-md text-sm text-slate-500">
             {module === "speaking"
               ? `Add and publish speaking questions for Part ${part} in Admin → Speaking, then return here.`
-              : "No questions are available for this part yet."}
+              : module === "writing"
+                ? `Add writing questions for Task ${part} in Admin → Writing, then return here.`
+                : module === "listening"
+                  ? `Add listening sets for Part ${part} in Admin → Listening, then return here.`
+                  : module === "reading"
+                    ? `Add reading sets for Part ${part} in Admin → Reading, then return here.`
+                    : "No questions are available for this part yet."}
           </p>
           <a
             href={moduleUrl(module)}

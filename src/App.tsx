@@ -30,6 +30,10 @@ import { AdminCuratedQAPage } from "@/pages/admin/AdminCuratedQAPage";
 import { AdminQuestionLogsPage } from "@/pages/admin/AdminQuestionLogsPage";
 import { AdminQAAnalyticsPage } from "@/pages/admin/AdminQAAnalyticsPage";
 import { AdminBulkImportPage } from "@/pages/admin/AdminBulkImportPage";
+import { MockTestCatalogPage } from "@/pages/MockTestCatalogPage";
+import { MockTestIntroPage } from "@/pages/MockTestIntroPage";
+import { MockTestWorkspacePage } from "@/pages/MockTestWorkspacePage";
+import { MockTestResultsPage } from "@/pages/MockTestResultsPage";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { AttemptsPage } from "@/pages/AttemptsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -51,12 +55,11 @@ import { SubscriptionPage } from "@/pages/SubscriptionPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useAuth } from "@/providers/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const ADMIN_EMAILS = ["contact@scoresmartpte.com"];
+import { isAdminUser } from "@/lib/adminAccess";
 
 function RootRedirect() {
-  const { user, loading } = useAuth();
-  if (loading) {
+  const { user, profile, loading, profileLoading } = useAuth();
+  if (loading || (user && profileLoading)) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-muted/30">
         <Skeleton className="h-12 w-48" />
@@ -64,8 +67,7 @@ function RootRedirect() {
     );
   }
   if (user) {
-    const isAdmin = ADMIN_EMAILS.includes((user.email ?? "").toLowerCase());
-    return <Navigate to={isAdmin ? "/admin/dashboard" : "/dashboard"} replace />;
+    return <Navigate to={isAdminUser(user, profile) ? "/admin/dashboard" : "/dashboard"} replace />;
   }
   return <Navigate to="/login" replace />;
 }
@@ -88,8 +90,16 @@ export default function App() {
             element={<PracticeWorkspaceRedirect />}
           />
 
+          <Route
+            path="/mock-test/:testId/step/:stepIndex"
+            element={<MockTestWorkspacePage />}
+          />
+
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/mock-tests" element={<MockTestCatalogPage />} />
+            <Route path="/mock-test/:testId" element={<MockTestIntroPage />} />
+            <Route path="/mock-test/:testId/results" element={<MockTestResultsPage />} />
             <Route path="/practice" element={<PracticeHomePage />} />
             <Route path="/practice/dialogues" element={<PracticeDialoguesPage />} />
             <Route path="/practice/rapid-reviews" element={<PracticeRapidPage />} />

@@ -1,8 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/providers/AuthContext";
-
-const ADMIN_EMAILS = ["contact@scoresmartpte.com"];
+import { isAdminUser } from "@/lib/adminAccess";
 
 export function AdminRoute() {
   const { user, profile, loading, profileLoading } = useAuth();
@@ -17,12 +16,7 @@ export function AdminRoute() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  // Allow hardcoded admin email or profile role
-  const isAdmin =
-    ADMIN_EMAILS.includes((user.email ?? "").toLowerCase()) ||
-    profile?.role === "admin";
-
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  if (!isAdminUser(user, profile)) return <Navigate to="/dashboard" replace />;
 
   return <Outlet />;
 }

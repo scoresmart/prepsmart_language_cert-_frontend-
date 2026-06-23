@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Info, Mic, Square } from "lucide-react";
+import { AlertCircle, Info, Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AudioWaveBars } from "./AudioWaveBars";
 import { cn } from "@/lib/utils";
@@ -11,8 +11,12 @@ type Props = {
   prepareSecondsLeft: number;
   recordSecondsLeft: number;
   maxDuration: number;
+  audioStream?: MediaStream | null;
+  micReady?: boolean;
+  micError?: string | null;
   onStartRecording: () => void;
   onRecordingComplete: (blob: Blob) => void;
+  onRetryMic?: () => void;
   className?: string;
 };
 
@@ -21,13 +25,16 @@ export function UserRecordingBox({
   prepareSecondsLeft,
   recordSecondsLeft,
   maxDuration,
+  audioStream,
+  micReady = false,
+  micError,
   onStartRecording,
   onRecordingComplete,
+  onRetryMic,
   className,
 }: Props) {
   const mediaRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
-  const streamRef = React.useRef<MediaStream | null>(null);
   const completedRef = React.useRef(false);
 
   const onCompleteRef = React.useRef(onRecordingComplete);
@@ -39,63 +46,40 @@ export function UserRecordingBox({
     onCompleteRef.current(blob);
   }, []);
 
-  const stopTracks = React.useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  }, []);
-
   const stopRecording = React.useCallback(() => {
     if (mediaRef.current?.state === "recording") {
       mediaRef.current.stop();
     } else {
-      stopTracks();
       finishRecording(new Blob());
     }
-  }, [finishRecording, stopTracks]);
+  }, [finishRecording]);
 
   React.useEffect(() => {
-    if (phase !== "recording") return;
+    if (phase !== "recording" || !audioStream) return;
 
     completedRef.current = false;
-    let cancelled = false;
+    chunksRef.current = [];
 
-    async function startRecording() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        chunksRef.current = [];
-        const recorder = new MediaRecorder(stream);
-        mediaRef.current = recorder;
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
-        recorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-          stopTracks();
-          finishRecording(blob);
-        };
-        recorder.start();
-      } catch {
-        finishRecording(new Blob());
-      }
-    }
+    const recorder = new MediaRecorder(audioStream);
+    mediaRef.current = recorder;
 
-    void startRecording();
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      finishRecording(blob);
+    };
+
+    recorder.start();
 
     return () => {
-      cancelled = true;
       if (mediaRef.current?.state === "recording") {
         mediaRef.current.stop();
-      } else {
-        stopTracks();
       }
       mediaRef.current = null;
     };
-  }, [phase, finishRecording, stopTracks]);
+  }, [phase, audioStream, finishRecording]);
 
   React.useEffect(() => {
     if (phase === "recorded" && mediaRef.current?.state === "recording") {
@@ -107,7 +91,7 @@ export function UserRecordingBox({
   const isRecording = phase === "recording";
   const isPreparing = phase === "preparing";
   const isRecorded = phase === "recorded";
-  const canStart = isPreparing;
+  const canStart = isPreparing && micReady && !micError;
 
   return (
     <div
@@ -118,6 +102,36 @@ export function UserRecordingBox({
         className,
       )}
     >
+      {micError && (
+        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-left">
+          <p className="flex items-start gap-2 text-sm font-medium text-rose-700">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            {micError}
+          </p>
+          {onRetryMic && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRetryMic}
+              className="mt-3 border-rose-300 text-rose-700 hover:bg-rose-100"
+            >
+              Enable microphone
+            </Button>
+          )}
+        </div>
+      )}
+
+      {isPreparing && !micError && !micReady && (
+        <p className="mb-2 text-sm font-medium text-amber-700">
+          Allow microphone access in your browser to start recording.
+        </p>
+      )}
+
+      {isPreparing && micReady && !micError && (
+        <p className="mb-2 text-sm font-medium text-emerald-700">Microphone ready.</p>
+      )}
+
       {isPreparing && (
         <p className="text-sm font-semibold text-rose-600">
           Prepare: <span className="tabular-nums">00:{String(prepareSecondsLeft).padStart(2, "0")}</span>
@@ -152,7 +166,9 @@ export function UserRecordingBox({
               ? "cursor-pointer border-cyan-300 bg-white text-cyan-600 shadow-md hover:scale-105"
               : isRecorded
                 ? "border-emerald-300 bg-white text-emerald-500"
-                : "border-slate-200 bg-white text-slate-300",
+                : micReady && isPreparing
+                  ? "border-emerald-200 bg-white text-emerald-500"
+                  : "border-slate-200 bg-white text-slate-300",
         )}
         aria-label={isRecording ? "Stop recording" : canStart ? "Start recording" : "Microphone"}
       >
@@ -161,11 +177,17 @@ export function UserRecordingBox({
 
       {isPreparing && (
         <p className="mt-3 text-sm font-medium text-slate-600">
-          Recording starts automatically in{" "}
-          <span className="tabular-nums font-semibold text-rose-600">
-            00:{String(prepareSecondsLeft).padStart(2, "0")}
-          </span>
-          {" "}— or start now
+          {micReady ? (
+            <>
+              Recording starts automatically in{" "}
+              <span className="tabular-nums font-semibold text-rose-600">
+                00:{String(prepareSecondsLeft).padStart(2, "0")}
+              </span>
+              {" "}— or start now
+            </>
+          ) : (
+            <>Waiting for microphone permission…</>
+          )}
         </p>
       )}
 

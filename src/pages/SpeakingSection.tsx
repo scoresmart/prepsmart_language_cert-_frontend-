@@ -11,14 +11,19 @@ import { api } from "@/lib/api";
 import { PRACTICE_TIPS } from "@/lib/practiceTips";
 
 import { saveLocalRecording } from "@/lib/practiceAttemptStorage";
+import { notifyMockTestScoreFromAttempt, notifyMockSpeakingAiScore } from "@/lib/mockTestRecorder";
+import {
+  isMicrophoneStreamActive,
+  microphoneErrorMessage,
+  requestMicrophoneAccess,
+  stopMicrophoneStream,
+} from "@/lib/microphoneAccess";
 
 import { fetchPracticeQuestions, type SpeakingQuestion } from "@/lib/practiceQuestions";
 
 import {
 
-  SPEAKING_PREP_SECONDS,
-
-  SPEAKING_RECORD_SECONDS,
+  getSpeakingPartTiming,
 
 } from "@/lib/speakingInstructions";
 
@@ -31,6 +36,10 @@ import { useSpeakingPracticeStateOptional } from "@/components/practice/speaking
 import { SpeakingQuestionPanel } from "@/components/practice/speaking/SpeakingQuestionPanel";
 
 import { SpeakingSidebar } from "@/components/practice/speaking/SpeakingSidebar";
+
+import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
+
+import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
 
 import type { RecordingPhase } from "@/components/practice/speaking/UserRecordingBox";
 
@@ -64,17 +73,21 @@ async function persistAttempt(
 
   onAttemptSaved?: () => void,
 
-) {
+): Promise<string | null> {
 
   try {
 
-    await api.practice.saveAttempt(body);
+    const res = await api.practice.saveAttempt(body);
+
+    notifyMockTestScoreFromAttempt(body.question_type, body.score, body.total);
 
     onAttemptSaved?.();
 
+    return res.data?.id ?? null;
+
   } catch {
 
-    /* silent */
+    return null;
 
   }
 
@@ -122,19 +135,36 @@ function SpeakingRunner({
 
   const question = q.data;
 
-
+  const partTiming = React.useMemo(
+    () => getSpeakingPartTiming(part, question?.level),
+    [part, question?.level],
+  );
 
   const [phase, setPhase] = React.useState<RecordingPhase>("waiting");
 
-  const [prepareLeft, setPrepareLeft] = React.useState(SPEAKING_PREP_SECONDS);
+  const [prepareLeft, setPrepareLeft] = React.useState(partTiming.prepSeconds);
 
-  const [recordLeft, setRecordLeft] = React.useState(SPEAKING_RECORD_SECONDS);
+  const [recordLeft, setRecordLeft] = React.useState(partTiming.recordSeconds);
 
   const [recordingBlob, setRecordingBlob] = React.useState<Blob | null>(null);
+
+  const [micStream, setMicStream] = React.useState<MediaStream | null>(null);
+
+  const micStreamRef = React.useRef<MediaStream | null>(null);
+
+  const [micReady, setMicReady] = React.useState(false);
+
+  const [micError, setMicError] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
 
   const [submitted, setSubmitted] = React.useState(false);
+
+  const [scoringPhase, setScoringPhase] = React.useState<ScoringPhase>("idle");
+
+  const [speakingScore, setSpeakingScore] = React.useState<SpeakingScoreResult | null>(null);
+
+  const [scoringError, setScoringError] = React.useState<string | null>(null);
 
   const speakingPractice = useSpeakingPracticeStateOptional();
 
@@ -152,11 +182,71 @@ function SpeakingRunner({
 
       recordSecondsLeft: recordLeft,
 
-      maxDuration: SPEAKING_RECORD_SECONDS,
+      maxDuration: partTiming.recordSeconds,
 
     });
 
-  }, [phase, prepareLeft, recordLeft, setSpeakingPracticeState]);
+  }, [phase, prepareLeft, recordLeft, partTiming.recordSeconds, setSpeakingPracticeState]);
+
+
+
+  const stopMic = React.useCallback(() => {
+
+    stopMicrophoneStream(micStreamRef.current);
+
+    micStreamRef.current = null;
+
+    setMicStream(null);
+
+    setMicReady(false);
+
+  }, []);
+
+
+
+  const ensureMicAccess = React.useCallback(async (): Promise<boolean> => {
+
+    if (isMicrophoneStreamActive(micStreamRef.current)) {
+
+      setMicReady(true);
+
+      setMicError(null);
+
+      return true;
+
+    }
+
+
+
+    stopMic();
+
+
+
+    try {
+
+      const stream = await requestMicrophoneAccess();
+
+      micStreamRef.current = stream;
+
+      setMicStream(stream);
+
+      setMicReady(true);
+
+      setMicError(null);
+
+      return true;
+
+    } catch (error) {
+
+      setMicError(microphoneErrorMessage(error));
+
+      setMicReady(false);
+
+      return false;
+
+    }
+
+  }, [stopMic]);
 
 
 
@@ -166,15 +256,29 @@ function SpeakingRunner({
 
     setPhase("waiting");
 
-    setPrepareLeft(SPEAKING_PREP_SECONDS);
+    setPrepareLeft(partTiming.prepSeconds);
 
-    setRecordLeft(SPEAKING_RECORD_SECONDS);
+    setRecordLeft(partTiming.recordSeconds);
 
     setRecordingBlob(null);
 
     setSubmitted(false);
 
-  }, [question?.id, attemptKey]);
+    setScoringPhase("idle");
+
+    setSpeakingScore(null);
+
+    setScoringError(null);
+
+    stopMic();
+
+    setMicError(null);
+
+  }, [question?.id, attemptKey, stopMic, partTiming.prepSeconds, partTiming.recordSeconds]);
+
+
+
+  React.useEffect(() => () => stopMic(), [stopMic]);
 
 
 
@@ -182,19 +286,25 @@ function SpeakingRunner({
 
     setPhase("preparing");
 
-    setPrepareLeft(SPEAKING_PREP_SECONDS);
+    setPrepareLeft(partTiming.prepSeconds);
 
-  }, []);
+    void ensureMicAccess();
+
+  }, [ensureMicAccess, partTiming.prepSeconds]);
 
 
 
-  const handleStartRecording = React.useCallback(() => {
+  const handleStartRecording = React.useCallback(async () => {
+
+    const ok = await ensureMicAccess();
+
+    if (!ok) return;
 
     setPhase("recording");
 
-    setRecordLeft(SPEAKING_RECORD_SECONDS);
+    setRecordLeft(partTiming.recordSeconds);
 
-  }, []);
+  }, [ensureMicAccess, partTiming.recordSeconds]);
 
 
 
@@ -202,19 +312,23 @@ function SpeakingRunner({
 
     if (phase !== "preparing") return;
 
-    if (prepareLeft <= 0) {
-
-      handleStartRecording();
-
-      return;
-
-    }
+    if (prepareLeft <= 0) return;
 
     const t = window.setTimeout(() => setPrepareLeft((s) => s - 1), 1000);
 
     return () => window.clearTimeout(t);
 
-  }, [phase, prepareLeft, handleStartRecording]);
+  }, [phase, prepareLeft]);
+
+
+
+  React.useEffect(() => {
+
+    if (phase !== "preparing" || prepareLeft > 0 || !micReady || micError) return;
+
+    void handleStartRecording();
+
+  }, [phase, prepareLeft, micReady, micError, handleStartRecording]);
 
 
 
@@ -254,13 +368,21 @@ function SpeakingRunner({
 
     setSubmitting(true);
 
+    setSubmitted(true);
+
+    setScoringPhase("scoring");
+
+    setSpeakingScore(null);
+
+    setScoringError(null);
+
     if (recordingBlob) {
 
       await saveLocalRecording(question.id, recordingBlob);
 
     }
 
-    await persistAttempt(
+    const attemptId = await persistAttempt(
 
       {
 
@@ -270,7 +392,7 @@ function SpeakingRunner({
 
         score: 0,
 
-        total: question.max_score,
+        total: 50,
 
       },
 
@@ -278,9 +400,43 @@ function SpeakingRunner({
 
     );
 
-    setSubmitted(true);
+    try {
 
-    setSubmitting(false);
+      if (!recordingBlob || recordingBlob.size === 0) {
+
+        throw new Error("No recording found. Please record your answer before submitting.");
+
+      }
+
+      const formData = new FormData();
+
+      formData.append("audio", recordingBlob, "recording.webm");
+
+      formData.append("level", question.level);
+
+      formData.append("task_description", `${question.title}\n\n${question.content}`);
+
+      if (attemptId) formData.append("attempt_id", attemptId);
+
+      const res = await api.scoring.speakingAudio(formData);
+
+      setSpeakingScore(res.data);
+
+      notifyMockSpeakingAiScore(part, res.data.scores.scaledTotal);
+
+      setScoringPhase("done");
+
+    } catch (error) {
+
+      setScoringError(error instanceof Error ? error.message : "Scoring failed");
+
+      setScoringPhase("error");
+
+    } finally {
+
+      setSubmitting(false);
+
+    }
 
   };
 
@@ -329,7 +485,7 @@ function SpeakingRunner({
         className="gap-2 bg-violet-600 hover:bg-violet-700"
       >
         <Send className="size-4" />
-        {submitting ? "Submitting…" : submitted ? "Submitted" : "Submit"}
+        {submitting ? "Submitting…" : submitted ? (scoringPhase === "scoring" ? "Scoring…" : "Submitted") : "Submit"}
       </Button>
       <Button type="button" variant="outline" onClick={() => { onRetry(); }} className="gap-2">
         <RotateCcw className="size-4" />
@@ -345,6 +501,8 @@ function SpeakingRunner({
     <SpeakingPracticeShell
 
       activePart={part}
+
+      level={question.level}
 
       setIndex={questionIndex}
 
@@ -374,15 +532,51 @@ function SpeakingRunner({
 
         recordSecondsLeft={recordLeft}
 
-        maxDuration={SPEAKING_RECORD_SECONDS}
+        maxDuration={partTiming.recordSeconds}
+
+        audioStream={micStream}
+
+        micReady={micReady}
+
+        micError={micError}
 
         onStartPreparing={startPreparing}
 
-        onStartRecording={handleStartRecording}
+        onStartRecording={() => {
+
+          void handleStartRecording();
+
+        }}
 
         onRecordingComplete={handleRecordingComplete}
 
+        onRetryMic={() => {
+
+          void ensureMicAccess();
+
+        }}
+
       />
+
+
+
+      {submitted && (
+
+        <div className="mx-auto mt-4 w-full max-w-3xl px-1">
+
+          <PracticeScoreResult
+
+            phase={scoringPhase}
+
+            error={scoringError}
+
+            speaking={speakingScore}
+
+          />
+
+        </div>
+
+      )}
 
 
 
@@ -398,7 +592,7 @@ function SpeakingRunner({
 
           recordSecondsLeft={recordLeft}
 
-          maxDuration={SPEAKING_RECORD_SECONDS}
+          maxDuration={partTiming.recordSeconds}
 
           className="mt-2 rounded-xl border border-slate-200"
 

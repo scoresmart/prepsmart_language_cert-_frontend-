@@ -1,4 +1,4 @@
-import { api, type ListeningQuestion, type SpeakingQuestion, type WritingQuestion } from "@/lib/api";
+import { api, type ListeningQuestion, type ReadingQuestion, type SpeakingQuestion, type WritingQuestion } from "@/lib/api";
 import { LISTENING_PARTS } from "@/lib/listeningInstructions";
 import { READING_PARTS } from "@/lib/readingInstructions";
 import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
@@ -13,7 +13,7 @@ export type PracticeQuestionItem = {
   id: string;
   index: number;
   title: string;
-  raw: WritingQuestion | ListeningQuestion | SpeakingQuestion;
+  raw: WritingQuestion | ListeningQuestion | SpeakingQuestion | ReadingQuestion;
 };
 
 const READING_TASK_MAP: Record<string, string> = {
@@ -22,6 +22,14 @@ const READING_TASK_MAP: Record<string, string> = {
   "2": "reading_part_2",
   "3": "reading_part_3",
   "4": "reading_part_4",
+};
+
+const READING_PART_TYPE_MAP: Record<string, "part1a" | "part1b" | "part2" | "part3" | "part4"> = {
+  "1a": "part1a",
+  "1b": "part1b",
+  "2": "part2",
+  "3": "part3",
+  "4": "part4",
 };
 
 export function getDefaultPart(section: string): string {
@@ -133,13 +141,13 @@ export async function fetchPracticeQuestions(
   }
 
   if (section === "reading") {
-    const taskType = READING_TASK_MAP[part] ?? "reading_part_1a";
-    const res = await api.writing.list(taskType as "task1");
-    const rows = res.data ?? [];
+    const partType = READING_PART_TYPE_MAP[part] ?? "part1a";
+    const res = await api.reading.list({ part_type: partType, page: 1, limit: 500 });
+    const rows = res.data?.questions ?? [];
     return rows.map((q, i) => ({
       id: q.id,
       index: i + 1,
-      title: getQuestionTitle(q, section, i + 1),
+      title: q.title ? truncate(q.title, 56) : (q.passage ? truncate(q.passage, 56) : `Set #${i + 1}`),
       raw: q,
     }));
   }

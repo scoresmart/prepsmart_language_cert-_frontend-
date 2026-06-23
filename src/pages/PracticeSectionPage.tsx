@@ -1,10 +1,10 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type WritingQuestion, type ListeningQuestion } from "@/lib/api";
+import { api, type WritingQuestion, type ListeningQuestion, type ReadingQuestion } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  CheckCircle2, Loader2, RotateCcw,
+  Loader2, RotateCcw,
   Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,9 @@ import {
 import { WritingRichEditor } from "@/components/practice/writing/WritingRichEditor";
 import { WRITING_WORD_LIMITS } from "@/lib/writingInstructions";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
+import { notifyMockTestScoreFromAttempt, notifyMockWritingAiScore } from "@/lib/mockTestRecorder";
+import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
+import { DEFAULT_WRITING_LEVEL, type ScoringPhase, type WritingScoreResult } from "@/lib/scoringTypes";
 
 type AttemptBody = {
   question_type: string;
@@ -35,12 +38,14 @@ type AttemptBody = {
   total: number;
 };
 
-async function persistAttempt(body: AttemptBody, onAttemptSaved?: () => void) {
+async function persistAttempt(body: AttemptBody, onAttemptSaved?: () => void): Promise<string | null> {
   try {
-    await api.practice.saveAttempt(body);
+    const res = await api.practice.saveAttempt(body);
+    notifyMockTestScoreFromAttempt(body.question_type, body.score, body.total);
     onAttemptSaved?.();
+    return res.data?.id ?? null;
   } catch {
-    /* silent */
+    return null;
   }
 }
 
@@ -136,15 +141,20 @@ export function WritingRunner({
   onPrevious,
   onNext,
   onAttemptSaved,
+  fixedQuestion,
 }: {
   part: string;
   questionIndex?: number;
   attemptKey?: number;
   onRetry?: () => void;
+  fixedQuestion?: WritingQuestion;
 } & WritingNavProps) {
   const taskType = part === "1" ? "task1" : "task2";
   const [text, setText] = React.useState("");
   const [submitted, setSubmitted] = React.useState(false);
+  const [scoringPhase, setScoringPhase] = React.useState<ScoringPhase>("idle");
+  const [writingScore, setWritingScore] = React.useState<WritingScoreResult | null>(null);
+  const [scoringError, setScoringError] = React.useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ["practice", "writing", taskType],
@@ -152,40 +162,67 @@ export function WritingRunner({
       const res = await api.writing.list(taskType as "task1" | "task2");
       return res.data ?? [];
     },
+    enabled: !fixedQuestion,
   });
 
-  const questions = q.data ?? [];
+  const questions = fixedQuestion ? [fixedQuestion] : (q.data ?? []);
   const question = questions[questionIndex - 1];
 
   React.useEffect(() => {
     setText("");
     setSubmitted(false);
+    setScoringPhase("idle");
+    setWritingScore(null);
+    setScoringError(null);
   }, [questionIndex, attemptKey, question?.id]);
 
   const handleSubmit = async () => {
     if (!question) return;
     setSubmitted(true);
+    setScoringPhase("scoring");
+    setWritingScore(null);
+    setScoringError(null);
     saveLocalAnswer(question.id, text);
-    await persistAttempt(
+
+    const attemptId = await persistAttempt(
       {
         question_type: `writing_${taskType}`,
         question_set_id: question.id,
         score: 0,
-        total: 0,
+        total: 12,
       },
       onAttemptSaved,
     );
+
+    try {
+      const res = await api.scoring.writing({
+        question_text: question.question_text,
+        candidate_response: text,
+        level: DEFAULT_WRITING_LEVEL,
+        task_type: taskType,
+        attempt_id: attemptId ?? undefined,
+      });
+      setWritingScore(res.data);
+      notifyMockWritingAiScore(taskType as "task1" | "task2", res.data.scores.total);
+      setScoringPhase("done");
+    } catch (error) {
+      setScoringError(error instanceof Error ? error.message : "Scoring failed");
+      setScoringPhase("error");
+    }
   };
 
   const handleRetry = () => {
     setText("");
     setSubmitted(false);
+    setScoringPhase("idle");
+    setWritingScore(null);
+    setScoringError(null);
     onRetry?.();
   };
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
 
-  if (q.isLoading) return <LoadingState />;
+  if (!fixedQuestion && q.isLoading) return <LoadingState />;
   if (!question) return <EmptyState label={`Writing Task ${part}`} />;
 
   const imageUrl = getImageUrl(question.image_path);
@@ -225,6 +262,23 @@ export function WritingRunner({
             attemptKey={`${question.id}-${attemptKey}`}
             onChange={setText}
             onRetry={handleRetry}
+            scoreSlot={
+              submitted ? (
+                <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+                  <PracticeScoreResult
+                    phase={scoringPhase}
+                    error={scoringError}
+                    writing={writingScore}
+                    className="shrink-0"
+                  />
+                  {scoringPhase === "done" && (
+                    <Button onClick={handleRetry} variant="outline" size="sm" className="mx-auto gap-2">
+                      <RotateCcw className="size-3.5" /> Re-do
+                    </Button>
+                  )}
+                </div>
+              ) : undefined
+            }
           />
         }
         footer={
@@ -274,13 +328,15 @@ export function WritingRunner({
         </div>
 
         {submitted ? (
-          <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-6 text-center">
-            <CheckCircle2 className="mx-auto size-8 text-emerald-500" />
-            <p className="font-semibold text-emerald-700">Answer submitted!</p>
-            <p className="text-sm text-slate-500">Your response ({wordCount} words) has been recorded.</p>
-            <Button onClick={handleRetry} variant="outline" size="sm" className="mt-1 gap-2">
-              <RotateCcw className="size-3.5" /> Re-do
-            </Button>
+          <div className="space-y-4">
+            <PracticeScoreResult phase={scoringPhase} error={scoringError} writing={writingScore} />
+            {scoringPhase === "done" && (
+              <div className="text-center">
+                <Button onClick={handleRetry} variant="outline" size="sm" className="gap-2">
+                  <RotateCcw className="size-3.5" /> Re-do
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <WritingRichEditor
@@ -770,6 +826,18 @@ function Reading4Runner({
 
 // ── Reading Section Router ────────────────────────────────────────────────────
 
+function toWritingShape(rq: ReadingQuestion): WritingQuestion {
+  return {
+    id: rq.id,
+    task_type: "task1",
+    question_text: rq.title || rq.passage || "",
+    image_path: rq.questions ? JSON.stringify(rq.questions) : null,
+    created_by: rq.created_by,
+    created_at: rq.created_at,
+    updated_at: rq.updated_at,
+  };
+}
+
 export function ReadingSection({
   part,
   questionIndex = 1,
@@ -779,6 +847,7 @@ export function ReadingSection({
   onPrevious,
   onNext,
   onAttemptSaved,
+  fixedQuestion,
 }: {
   part: string;
   questionIndex?: number;
@@ -788,29 +857,31 @@ export function ReadingSection({
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
+  fixedQuestion?: WritingQuestion;
 }) {
-  const taskTypeMap: Record<string, string> = {
-    "1a": "reading_part_1a",
-    "1b": "reading_part_1b",
-    "2": "reading_part_2",
-    "3": "reading_part_3",
-    "4": "reading_part_4",
+  const partTypeMap: Record<string, "part1a" | "part1b" | "part2" | "part3" | "part4"> = {
+    "1a": "part1a",
+    "1b": "part1b",
+    "2": "part2",
+    "3": "part3",
+    "4": "part4",
   };
-  const taskType = taskTypeMap[part] ?? "reading_part_1a";
+  const partType = partTypeMap[part] ?? "part1a";
 
   const q = useQuery({
-    queryKey: ["practice", "reading", taskType],
+    queryKey: ["practice", "reading", partType],
     queryFn: async () => {
-      const res = await api.writing.list(taskType as "task1");
-      return res.data ?? [];
+      const res = await api.reading.list({ part_type: partType, page: 1, limit: 500 });
+      return (res.data?.questions ?? []).map(toWritingShape);
     },
+    enabled: !fixedQuestion,
   });
 
-  const questions = q.data ?? [];
+  const questions = fixedQuestion ? [fixedQuestion] : (q.data ?? []);
   const question = questions[questionIndex - 1];
   const runnerKey = `${question?.id ?? "none"}-${attemptKey}`;
 
-  if (q.isLoading) return <LoadingState />;
+  if (!fixedQuestion && q.isLoading) return <LoadingState />;
   if (!question) return <EmptyState label={`Reading Part ${part.toUpperCase()}`} />;
 
   const navProps: ReadingNavProps = {
@@ -1184,6 +1255,7 @@ export function ListeningSection({
   onPrevious,
   onNext,
   onAttemptSaved,
+  fixedQuestion,
 }: {
   part: string;
   questionIndex?: number;
@@ -1193,6 +1265,7 @@ export function ListeningSection({
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
+  fixedQuestion?: ListeningQuestion;
 }) {
   const partNum = parseInt(part) || 1;
 
@@ -1202,9 +1275,10 @@ export function ListeningSection({
       const res = await api.listening.list({ part_number: partNum, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
+    enabled: !fixedQuestion,
   });
 
-  const questions = q.data ?? [];
+  const questions = fixedQuestion ? [fixedQuestion] : (q.data ?? []);
   const question = questions[questionIndex - 1];
   const runnerKey = `${question?.id ?? "none"}-${attemptKey}`;
   const navProps: ListeningNavProps = {
@@ -1215,7 +1289,7 @@ export function ListeningSection({
     onAttemptSaved,
   };
 
-  if (q.isLoading) return <LoadingState />;
+  if (!fixedQuestion && q.isLoading) return <LoadingState />;
   if (!question) return <EmptyState label={`Listening Part ${part}`} />;
 
   if (partNum === 1) return <Listening1Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />;

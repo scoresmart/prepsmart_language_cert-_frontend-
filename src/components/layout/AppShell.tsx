@@ -23,6 +23,7 @@ import {
 import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
 import { LCPracticeDropdown } from "@/components/layout/LCPracticeDropdown";
+import { isAdminUser } from "@/lib/adminAccess";
 
 type NavItem = {
   to?: string;
@@ -38,6 +39,7 @@ const mainNav: NavItem[] = [
     label: "Mock Tests",
     icon: FlaskConical,
     children: [
+      { to: "/mock-tests", label: "Mock Test Catalog", icon: FlaskConical },
       { to: "/attempts", label: "My Attempts", icon: BookOpen },
       { to: "/analytics", label: "Analytics", icon: LayoutDashboard },
     ],
@@ -151,7 +153,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           ),
         )}
 
-        {profile?.role === "admin" && (
+        {isAdminUser(user, profile) && (
           <NavLink
             to="/admin/dashboard"
             onClick={onClose}

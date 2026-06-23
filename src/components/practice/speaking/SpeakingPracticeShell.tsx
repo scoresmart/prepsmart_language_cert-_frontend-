@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Mic, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { partBadge, PracticePartHeaderBanner } from "@/components/practice/PracticePartHeaderBanner";
-import { SPEAKING_INSTRUCTIONS, SPEAKING_PART_TITLES } from "@/lib/speakingInstructions";
+import { SPEAKING_INSTRUCTIONS, SPEAKING_PART_TITLES, getSpeakingInstruction } from "@/lib/speakingInstructions";
 
 type Props = {
   activePart: string;
+  level?: string;
   setIndex?: number;
   totalSets?: number;
   onPrevious?: () => void;
@@ -17,6 +18,7 @@ type Props = {
 
 export function SpeakingPracticeShell({
   activePart,
+  level,
   setIndex = 1,
   totalSets = 1,
   onPrevious,
@@ -75,7 +77,7 @@ export function SpeakingPracticeShell({
                 module="speaking"
                 partLabel={`Speaking Part ${activePart}`}
                 title={SPEAKING_PART_TITLES[activePart] ?? "Speaking Practice"}
-                instructions={SPEAKING_INSTRUCTIONS[activePart]}
+                instructions={level ? getSpeakingInstruction(activePart, level) : SPEAKING_INSTRUCTIONS[activePart]}
                 badge={partBadge("speaking", activePart)}
                 icon={Mic}
               />

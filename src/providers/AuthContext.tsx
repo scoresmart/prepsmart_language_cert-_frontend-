@@ -3,6 +3,8 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import { isRecoverableDbError } from "@/lib/supabase/errors";
 import { ensureLcProfile } from "@/lib/ensureLcProfile";
+import { mapProfilesRowToLcProfile } from "@/lib/mapLcProfile";
+import { isAdminEmail } from "@/lib/adminAccess";
 import type { LcUserProfile } from "@/types/lc";
 
 type AuthContextValue = {
@@ -28,10 +30,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfileLoading(true);
     try {
       await ensureLcProfile(u);
-      const { data, error } = await supabase.from("user_profiles").select("*").eq("id", u.id).maybeSingle();
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
       if (error && !isRecoverableDbError(error)) throw error;
       if (error) console.warn("[PrepSmart LC] Profile unavailable:", error);
-      setProfile(error ? null : (data as LcUserProfile | null));
+      if (error || !data) {
+        setProfile(
+          isAdminEmail(u.email)
+            ? {
+                id: u.id,
+                full_name: u.user_metadata?.full_name ?? u.email?.split("@")[0] ?? null,
+                email: u.email ?? "",
+                role: "admin",
+                exam_date: null,
+                target_level: null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }
+            : null,
+        );
+      } else {
+        setProfile(mapProfilesRowToLcProfile(data));
+      }
     } catch (e) {
       console.error(e);
       setProfile(null);

@@ -15,9 +15,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { api, type SpeakingQuestion } from "@/lib/api";
 import { DEFAULT_SPEAKING_TEST_AUDIO } from "@/lib/speakingAudio";
 import { SPEAKING_DEFAULT_PROMPT } from "@/lib/speakingQuestionStructure";
+import { SPEAKING_PART_FOCUS, SPEAKING_PART_TITLES, SPEAKING_SCALED_MAX_SCORE } from "@/lib/speakingInstructions";
 
 // LanguageCert SELT Speaking task types — grouped by Part
 const SPEAKING_PARTS = [
@@ -76,25 +78,14 @@ const SPEAKING_PARTS = [
 ];
 
 // Flat list for filters/lookups
-const DIFFICULTY_LEVELS = ["A1", "A2", "B1", "B2"];
+const DIFFICULTY_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
-type Question = {
-  id: string;
-  title: string;
-  task_type: string;
-  part_number: number;
-  level: string;
-  max_score: number;
-  is_published: boolean;
-  created_at: string;
-  content?: string;
-  audio_url?: string;
-  image_url?: string;
-};
+type Question = SpeakingQuestion;
 
 type FormData = {
   title: string;
   type: string;
+  custom_task_type: string;
   level: string;
   max_score: number;
   is_published: boolean;
@@ -108,16 +99,29 @@ function partNumberFromTaskType(taskType: string): number {
   return match ? parseInt(match[1], 10) : 1;
 }
 
+const CUSTOM_TYPE = "__custom__";
+
 const emptyForm: FormData = {
   title: "",
   type: "speaking_part_1_task_1",
+  custom_task_type: "",
   level: "B1",
-  max_score: 90,
-  is_published: false,
+  max_score: SPEAKING_SCALED_MAX_SCORE,
+  is_published: true,
   content: SPEAKING_DEFAULT_PROMPT,
   audio_url: DEFAULT_SPEAKING_TEST_AUDIO,
   image_url: "",
 };
+
+function resolveTaskType(form: FormData): string {
+  if (form.type === CUSTOM_TYPE) return form.custom_task_type.trim();
+  return form.type;
+}
+
+function partNumberFromPartKey(partKey: string): number {
+  const match = partKey.match(/speaking_part_(\d+)/);
+  return match ? parseInt(match[1], 10) : 1;
+}
 
 
 export function AdminSpeakingPage() {
@@ -131,22 +135,20 @@ export function AdminSpeakingPage() {
   const q = useQuery({
     queryKey: ["admin", "speaking-questions"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("speaking_part_questions")
-        .select("id,title,task_type,part_number,level,max_score,is_published,created_at,content,audio_url,image_url")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as Question[];
+      const res = await api.speaking.listAll();
+      return res.data ?? [];
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: FormData & { id?: string }) => {
+      const task_type = resolveTaskType(data);
+      if (!task_type) throw new Error("Task type is required");
+
       const payload = {
-        title: data.title,
-        task_type: data.type,
-        part_number: partNumberFromTaskType(data.type),
+        title: data.title.trim(),
+        task_type,
+        part_number: partNumberFromTaskType(task_type),
         level: data.level,
         max_score: data.max_score,
         is_published: data.is_published,
@@ -154,41 +156,52 @@ export function AdminSpeakingPage() {
         audio_url: data.audio_url || null,
         image_url: data.image_url || null,
       };
+
       if (data.id) {
-        const { error } = await supabase.from("speaking_part_questions").update(payload).eq("id", data.id);
-        if (error) throw error;
+        await api.speaking.update(data.id, payload);
       } else {
-        const { error } = await supabase.from("speaking_part_questions").insert(payload);
-        if (error) throw error;
+        await api.speaking.create(payload);
       }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "speaking-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["speaking-runner"] });
+      qc.invalidateQueries({ queryKey: ["practice", "speaking"] });
       setDialogOpen(false);
       setEditRow(null);
       setForm(emptyForm);
+      toast.success(editRow ? "Question updated" : "Question added");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Could not save question");
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("speaking_part_questions").delete().eq("id", id);
-      if (error) throw error;
+      await api.speaking.delete(id);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "speaking-questions"] });
-      qc.invalidateQueries({ queryKey: ["lc", "admin", "dashboard-stats"] });
       setDeleteId(null);
+      toast.success("Question deleted");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Could not delete question");
     },
   });
 
   const togglePublish = useMutation({
     mutationFn: async ({ id, val }: { id: string; val: boolean }) => {
-      const { error } = await supabase.from("speaking_part_questions").update({ is_published: val }).eq("id", id);
-      if (error) throw error;
+      await api.speaking.update(id, { is_published: val });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "speaking-questions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "speaking-questions"] });
+      qc.invalidateQueries({ queryKey: ["speaking-runner"] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Could not update publish status");
+    },
   });
 
   const [expandedParts, setExpandedParts] = React.useState<Set<string>>(
@@ -202,15 +215,24 @@ export function AdminSpeakingPage() {
     });
 
   const openAdd = () => { setEditRow(null); setForm(emptyForm); setDialogOpen(true); };
-  const openAddForTask = (taskValue: string) => {
-    setEditRow(null); setForm({ ...emptyForm, type: taskValue }); setDialogOpen(true);
+  const openAddForTask = (taskValue: string, partKey?: string) => {
+    setEditRow(null);
+    setForm({
+      ...emptyForm,
+      type: taskValue,
+      custom_task_type:
+        taskValue === CUSTOM_TYPE && partKey ? `${partKey}_custom` : "",
+    });
+    setDialogOpen(true);
   };
 
   const openEdit = (row: Question) => {
+    const knownTypes = new Set(SPEAKING_PARTS.flatMap((p) => p.tasks.map((t) => t.value)));
     setEditRow(row);
     setForm({
       title: row.title,
-      type: row.task_type,
+      type: knownTypes.has(row.task_type) ? row.task_type : CUSTOM_TYPE,
+      custom_task_type: knownTypes.has(row.task_type) ? "" : row.task_type,
       level: row.level,
       max_score: row.max_score,
       is_published: row.is_published,
@@ -224,13 +246,30 @@ export function AdminSpeakingPage() {
   const grouped = React.useMemo(() => {
     const rows = q.data ?? [];
     const s = search.toLowerCase();
-    return SPEAKING_PARTS.map((part) => ({
-      ...part,
-      tasks: part.tasks.map((task) => ({
-        ...task,
-        questions: rows.filter((r) => r.task_type === task.value && (!s || r.title.toLowerCase().includes(s))),
-      })),
-    }));
+    const knownTypes = new Set(SPEAKING_PARTS.flatMap((p) => p.tasks.map((t) => t.value)));
+
+    return SPEAKING_PARTS.map((part) => {
+      const partNum = partNumberFromPartKey(part.part);
+      const tasks = [
+        ...part.tasks.map((task) => ({
+          ...task,
+          questions: rows.filter(
+            (r) => r.task_type === task.value && (!s || r.title.toLowerCase().includes(s)),
+          ),
+        })),
+        {
+          value: `${part.part}_other`,
+          label: "Other / Custom",
+          questions: rows.filter(
+            (r) =>
+              r.part_number === partNum &&
+              !knownTypes.has(r.task_type) &&
+              (!s || r.title.toLowerCase().includes(s)),
+          ),
+        },
+      ];
+      return { ...part, tasks };
+    });
   }, [q.data, search]);
 
   return (
@@ -273,7 +312,14 @@ export function AdminSpeakingPage() {
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500">
                       <Mic className="size-4 text-white" />
                     </div>
-                    <span className="font-semibold text-slate-800">Speaking {part.label}</span>
+                    <div>
+                      <span className="font-semibold text-slate-800">
+                        Speaking Part {partNumberFromPartKey(part.part)} — {SPEAKING_PART_TITLES[String(partNumberFromPartKey(part.part))]}
+                      </span>
+                      <p className="mt-0.5 text-left text-xs font-normal text-slate-500">
+                        {SPEAKING_PART_FOCUS[String(partNumberFromPartKey(part.part))]}
+                      </p>
+                    </div>
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">{partTotal} question{partTotal !== 1 ? "s" : ""}</span>
                   </div>
                   {isOpen ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
@@ -286,7 +332,7 @@ export function AdminSpeakingPage() {
                           <span className="text-sm font-medium text-slate-700">{task.label}</span>
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-slate-400">{task.questions.length} question{task.questions.length !== 1 ? "s" : ""}</span>
-                            <button onClick={() => openAddForTask(task.value)} className="flex items-center gap-1 rounded-md bg-blue-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-600 transition">
+                            <button onClick={() => openAddForTask(task.value.endsWith("_other") ? CUSTOM_TYPE : task.value, part.part)} className="flex items-center gap-1 rounded-md bg-blue-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-600 transition">
                               <Plus className="size-3" /> Add
                             </button>
                           </div>
@@ -337,6 +383,7 @@ export function AdminSpeakingPage() {
                       {p.tasks.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </optgroup>
                   ))}
+                  <option value={CUSTOM_TYPE}>Custom task type…</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -348,6 +395,16 @@ export function AdminSpeakingPage() {
                 </Select>
               </div>
             </div>
+            {form.type === CUSTOM_TYPE && (
+              <div className="space-y-1.5">
+                <Label>Custom task type *</Label>
+                <Input
+                  placeholder="e.g. speaking_part_1_azure_test"
+                  value={form.custom_task_type}
+                  onChange={(e) => setForm({ ...form, custom_task_type: e.target.value })}
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Max Score</Label>
@@ -397,7 +454,11 @@ export function AdminSpeakingPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => saveMutation.mutate({ ...form, id: editRow?.id })}
-              disabled={!form.title || saveMutation.isPending}
+              disabled={
+                !form.title.trim() ||
+                (form.type === CUSTOM_TYPE && !form.custom_task_type.trim()) ||
+                saveMutation.isPending
+              }
             >
               {saveMutation.isPending ? "Saving…" : editRow ? "Save Changes" : "Add Question"}
             </Button>

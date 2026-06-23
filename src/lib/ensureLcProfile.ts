@@ -1,47 +1,47 @@
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
+import { isAdminEmail } from "@/lib/adminAccess";
 import { isRecoverableDbError } from "@/lib/supabase/errors";
 
-const ADMIN_EMAILS = ["contact@scoresmartpte.com"];
-
-/** Create user_profiles row on first LC login (avoids LMS-wide auth triggers). */
+/** Ensure `profiles` row exists and admin emails have admin role (same table as backend API). */
 export async function ensureLcProfile(user: User): Promise<void> {
-  const { data, error } = await supabase.from("user_profiles").select("id, role").eq("id", user.id).maybeSingle();
+  const email = user.email;
+  if (!email) return;
+
+  const { data, error } = await supabase.from("profiles").select("id, role").eq("id", user.id).maybeSingle();
   if (error) {
     if (isRecoverableDbError(error)) {
-      console.warn("[PrepSmart LC] user_profiles not available yet:", error);
+      console.warn("[PrepSmart LC] profiles not available yet:", error);
       return;
     }
     throw error;
   }
 
-  const email = user.email;
-  if (!email) return;
-
-  const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+  const shouldBeAdmin = isAdminEmail(email);
 
   if (data) {
-    // Upgrade to admin if needed
-    if (isAdmin && data.role !== "admin") {
-      await supabase.from("user_profiles").update({ role: "admin" }).eq("id", user.id);
+    if (shouldBeAdmin && data.role !== "admin") {
+      await supabase.from("profiles").update({ role: "admin" }).eq("id", user.id);
     }
     return;
   }
 
-  const { error: upsertError } = await supabase.from("user_profiles").upsert(
+  const { error: insertError } = await supabase.from("profiles").upsert(
     {
       id: user.id,
       email,
-      full_name: (user.user_metadata?.full_name as string | undefined) ?? email.split("@")[0],
-      role: isAdmin ? "admin" : "user",
+      name: (user.user_metadata?.full_name as string | undefined) ?? email.split("@")[0],
+      role: shouldBeAdmin ? "admin" : "student",
+      approval_status: "approved",
     },
     { onConflict: "id" },
   );
-  if (upsertError) {
-    if (isRecoverableDbError(upsertError)) {
-      console.warn("[PrepSmart LC] Could not create user_profiles:", upsertError);
+
+  if (insertError) {
+    if (isRecoverableDbError(insertError)) {
+      console.warn("[PrepSmart LC] Could not create profiles row:", insertError);
       return;
     }
-    throw upsertError;
+    throw insertError;
   }
 }

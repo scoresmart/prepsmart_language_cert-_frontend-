@@ -11,71 +11,65 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { api, type WritingQuestion } from "@/lib/api";
+import { api, type ReadingQuestion } from "@/lib/api";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type ReadingPartKey =
-  | "reading_part_1a"
-  | "reading_part_1b"
-  | "reading_part_2"
-  | "reading_part_3"
-  | "reading_part_4";
+type PartType = "part1a" | "part1b" | "part2" | "part3" | "part4";
 
-const READING_PARTS: { key: ReadingPartKey; label: string; shortLabel: string }[] = [
-  { key: "reading_part_1a", label: "Part 1A – Synonym Selection",        shortLabel: "Part 1A" },
-  { key: "reading_part_1b", label: "Part 1B – Gap Fill",                 shortLabel: "Part 1B" },
-  { key: "reading_part_2",  label: "Part 2 – Sentence Insertion",        shortLabel: "Part 2"  },
-  { key: "reading_part_3",  label: "Part 3 – Multiple Passage Matching", shortLabel: "Part 3"  },
-  { key: "reading_part_4",  label: "Part 4 – Reading Comprehension",     shortLabel: "Part 4"  },
+const READING_PARTS: { key: PartType; label: string; shortLabel: string }[] = [
+  { key: "part1a", label: "Part 1A – Synonym Selection",        shortLabel: "Part 1A" },
+  { key: "part1b", label: "Part 1B – Gap Fill",                 shortLabel: "Part 1B" },
+  { key: "part2",  label: "Part 2 – Sentence Insertion",        shortLabel: "Part 2"  },
+  { key: "part3",  label: "Part 3 – Multiple Passage Matching", shortLabel: "Part 3"  },
+  { key: "part4",  label: "Part 4 – Reading Comprehension",     shortLabel: "Part 4"  },
 ];
 
-const JSON_PLACEHOLDERS: Record<ReadingPartKey, string> = {
-  reading_part_1a: JSON.stringify(
+const JSON_PLACEHOLDERS: Record<PartType, string> = {
+  part1a: JSON.stringify(
     [{ questionText: "We expected to **land** at the airport", options: ["get", "arrive", "reach", "come"], correctAnswer: 1 }],
     null, 2,
   ),
-  reading_part_1b: JSON.stringify(
+  part1b: JSON.stringify(
     [{ options: ["documented", "recognised", "celebrated"], correctAnswer: 1 }],
     null, 2,
   ),
-  reading_part_2: JSON.stringify(
+  part2: JSON.stringify(
     { passage: "Full passage text with [1] [2] markers...", answers: ["Sentence A", "Sentence B"], correctMapping: { "1": "D", "2": "H" } },
     null, 2,
   ),
-  reading_part_3: JSON.stringify(
+  part3: JSON.stringify(
     { passages: [{ label: "A", text: "..." }, { label: "B", text: "..." }], statements: [{ text: "Some people believe...", correctAnswer: "B" }] },
     null, 2,
   ),
-  reading_part_4: JSON.stringify(
+  part4: JSON.stringify(
     { passageTitle: "Title", passage: "Full article...", questions: [{ text: "What does...", options: { A: "...", B: "...", C: "...", D: "..." }, correctAnswer: "C" }] },
     null, 2,
   ),
 };
 
-const QUESTION_TEXT_LABELS: Record<ReadingPartKey, string> = {
-  reading_part_1a: "Instructions text (e.g. 'Read and choose the best synonym')",
-  reading_part_1b: "Passage text with (1)……, (2)…… gaps",
-  reading_part_2:  "Short title or intro line",
-  reading_part_3:  "Brief description (e.g. 'Great artists steal – 4 passages')",
-  reading_part_4:  "Passage title",
+const TITLE_LABELS: Record<PartType, string> = {
+  part1a: "Instructions text (e.g. 'Read and choose the best synonym')",
+  part1b: "Passage text with (1)……, (2)…… gaps",
+  part2:  "Short title or intro line",
+  part3:  "Brief description (e.g. 'Great artists steal – 4 passages')",
+  part4:  "Passage title",
 };
 
-const JSON_FIELD_LABELS: Record<ReadingPartKey, string> = {
-  reading_part_1a: "Questions JSON",
-  reading_part_1b: "Gap Options JSON",
-  reading_part_2:  "Content JSON",
-  reading_part_3:  "Content JSON",
-  reading_part_4:  "Content JSON",
+const JSON_FIELD_LABELS: Record<PartType, string> = {
+  part1a: "Questions JSON",
+  part1b: "Gap Options JSON",
+  part2:  "Content JSON",
+  part3:  "Content JSON",
+  part4:  "Content JSON",
 };
 
-/** Parts that use a Textarea for question_text (vs. a single-line Input) */
-const QUESTION_TEXT_MULTILINE: Record<ReadingPartKey, boolean> = {
-  reading_part_1a: true,
-  reading_part_1b: true,
-  reading_part_2:  true,
-  reading_part_3:  false,
-  reading_part_4:  false,
+const TITLE_MULTILINE: Record<PartType, boolean> = {
+  part1a: true,
+  part1b: true,
+  part2:  true,
+  part3:  false,
+  part4:  false,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,40 +84,38 @@ function formatDate(iso: string): string {
   });
 }
 
-function structureSummary(imagePath: string | null): string {
-  if (!imagePath) return "—";
-  try {
-    const parsed = JSON.parse(imagePath);
-    if (Array.isArray(parsed)) return `${parsed.length} item${parsed.length !== 1 ? "s" : ""}`;
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray(parsed.questions)) return `${parsed.questions.length} question${parsed.questions.length !== 1 ? "s" : ""}`;
-      if (Array.isArray(parsed.passages) && Array.isArray(parsed.statements)) {
-        return `${parsed.passages.length} passages, ${parsed.statements.length} stmt`;
-      }
-      if (Array.isArray(parsed.answers)) return `${parsed.answers.length} sentence${parsed.answers.length !== 1 ? "s" : ""}`;
-      return `${Object.keys(parsed).length} key(s)`;
-    }
-  } catch {
-    return truncate(imagePath, 30);
+function structureSummary(questions: object[] | object | null | undefined): string {
+  if (!questions) return "—";
+  if (Array.isArray(questions)) return `${questions.length} item${questions.length !== 1 ? "s" : ""}`;
+  const q = questions as Record<string, unknown>;
+  if (Array.isArray(q.questions)) return `${(q.questions as unknown[]).length} question${(q.questions as unknown[]).length !== 1 ? "s" : ""}`;
+  if (Array.isArray(q.passages) && Array.isArray(q.statements)) {
+    return `${(q.passages as unknown[]).length} passages, ${(q.statements as unknown[]).length} stmt`;
   }
-  return "—";
+  if (Array.isArray(q.answers)) return `${(q.answers as unknown[]).length} sentence${(q.answers as unknown[]).length !== 1 ? "s" : ""}`;
+  return `${Object.keys(q).length} key(s)`;
 }
 
-function prettyJson(value: string): string {
+function prettyJson(value: object | object[] | null | undefined): string {
   if (!value) return "";
-  try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+  try { return JSON.stringify(value, null, 2); } catch { return ""; }
+}
+
+function parseJson(value: string): object | object[] | null {
+  if (!value.trim()) return null;
+  try { return JSON.parse(value); } catch { return null; }
 }
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 
-type FormState = { question_text: string; image_path: string };
-const emptyForm: FormState = { question_text: "", image_path: "" };
+type FormState = { title: string; questions_json: string };
+const emptyForm: FormState = { title: "", questions_json: "" };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface QTableProps {
-  rows: WritingQuestion[];
-  onEdit: (row: WritingQuestion) => void;
+  rows: ReadingQuestion[];
+  onEdit: (row: ReadingQuestion) => void;
   onDelete: (id: string) => void;
 }
 
@@ -140,7 +132,7 @@ function QuestionTable({ rows, onEdit, onDelete }: QTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
-            <th className="px-4 py-3">Preview</th>
+            <th className="px-4 py-3">Title / Preview</th>
             <th className="px-4 py-3 w-36">Structure</th>
             <th className="px-4 py-3 w-32">Created</th>
             <th className="px-4 py-3 w-24 text-right">Actions</th>
@@ -150,11 +142,11 @@ function QuestionTable({ rows, onEdit, onDelete }: QTableProps) {
           {rows.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50/60 transition">
               <td className="px-4 py-3 text-slate-700 max-w-xs">
-                <span className="line-clamp-2">{truncate(row.question_text, 60)}</span>
+                <span className="line-clamp-2">{truncate(row.title || row.passage || "—", 60)}</span>
               </td>
               <td className="px-4 py-3">
                 <Badge variant="secondary" className="text-xs font-normal">
-                  {structureSummary(row.image_path)}
+                  {structureSummary(row.questions as object[] | null)}
                 </Badge>
               </td>
               <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(row.created_at)}</td>
@@ -185,35 +177,35 @@ function QuestionTable({ rows, onEdit, onDelete }: QTableProps) {
 }
 
 interface PartFormFieldsProps {
-  partKey: ReadingPartKey;
+  partKey: PartType;
   form: FormState;
   onChange: (next: FormState) => void;
 }
 
 function PartFormFields({ partKey, form, onChange }: PartFormFieldsProps) {
   const jsonLabel = JSON_FIELD_LABELS[partKey];
-  const qtLabel = QUESTION_TEXT_LABELS[partKey];
-  const multiline = QUESTION_TEXT_MULTILINE[partKey];
+  const titleLabel = TITLE_LABELS[partKey];
+  const multiline = TITLE_MULTILINE[partKey];
   const placeholder = JSON_PLACEHOLDERS[partKey];
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
         <Label>
-          {qtLabel} <span className="text-red-500">*</span>
+          {titleLabel} <span className="text-red-500">*</span>
         </Label>
         {multiline ? (
           <Textarea
-            placeholder={qtLabel}
+            placeholder={titleLabel}
             rows={4}
-            value={form.question_text}
-            onChange={(e) => onChange({ ...form, question_text: e.target.value })}
+            value={form.title}
+            onChange={(e) => onChange({ ...form, title: e.target.value })}
           />
         ) : (
           <Input
-            placeholder={qtLabel}
-            value={form.question_text}
-            onChange={(e) => onChange({ ...form, question_text: e.target.value })}
+            placeholder={titleLabel}
+            value={form.title}
+            onChange={(e) => onChange({ ...form, title: e.target.value })}
           />
         )}
       </div>
@@ -223,12 +215,11 @@ function PartFormFields({ partKey, form, onChange }: PartFormFieldsProps) {
           placeholder={placeholder}
           rows={10}
           className="font-mono text-xs"
-          value={form.image_path}
-          onChange={(e) => onChange({ ...form, image_path: e.target.value })}
+          value={form.questions_json}
+          onChange={(e) => onChange({ ...form, questions_json: e.target.value })}
         />
         <p className="text-xs text-slate-400">
-          Enter valid JSON. Stored in the{" "}
-          <code className="bg-slate-100 px-1 rounded">image_path</code> field.
+          Enter valid JSON matching the structure for this part type.
         </p>
       </div>
     </div>
@@ -240,70 +231,57 @@ function PartFormFields({ partKey, form, onChange }: PartFormFieldsProps) {
 export function AdminReadingPage() {
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = React.useState<ReadingPartKey>("reading_part_1a");
+  const [activeTab, setActiveTab] = React.useState<PartType>("part1a");
   const [search, setSearch] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editRow, setEditRow] = React.useState<WritingQuestion | null>(null);
-  const [dialogPartKey, setDialogPartKey] = React.useState<ReadingPartKey>("reading_part_1a");
+  const [editRow, setEditRow] = React.useState<ReadingQuestion | null>(null);
+  const [dialogPartKey, setDialogPartKey] = React.useState<PartType>("part1a");
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [jsonError, setJsonError] = React.useState<string | null>(null);
 
   // ─── Queries — one per tab ─────────────────────────────────────────────────
-  // Each query is only enabled when its tab is active.
-  const queryPart1a = useQuery({
-    queryKey: ["admin", "reading-questions", "reading_part_1a"],
-    queryFn: async () => { const res = await api.writing.list("reading_part_1a" as any); return res.data ?? []; },
-    enabled: activeTab === "reading_part_1a",
-    staleTime: 30_000,
-  });
-  const queryPart1b = useQuery({
-    queryKey: ["admin", "reading-questions", "reading_part_1b"],
-    queryFn: async () => { const res = await api.writing.list("reading_part_1b" as any); return res.data ?? []; },
-    enabled: activeTab === "reading_part_1b",
-    staleTime: 30_000,
-  });
-  const queryPart2 = useQuery({
-    queryKey: ["admin", "reading-questions", "reading_part_2"],
-    queryFn: async () => { const res = await api.writing.list("reading_part_2" as any); return res.data ?? []; },
-    enabled: activeTab === "reading_part_2",
-    staleTime: 30_000,
-  });
-  const queryPart3 = useQuery({
-    queryKey: ["admin", "reading-questions", "reading_part_3"],
-    queryFn: async () => { const res = await api.writing.list("reading_part_3" as any); return res.data ?? []; },
-    enabled: activeTab === "reading_part_3",
-    staleTime: 30_000,
-  });
-  const queryPart4 = useQuery({
-    queryKey: ["admin", "reading-questions", "reading_part_4"],
-    queryFn: async () => { const res = await api.writing.list("reading_part_4" as any); return res.data ?? []; },
-    enabled: activeTab === "reading_part_4",
+  const makeQuery = (partType: PartType) => ({
+    queryKey: ["admin", "reading-questions", partType],
+    queryFn: async () => {
+      const res = await api.reading.list({ part_type: partType, page: 1, limit: 500 });
+      return res.data?.questions ?? [];
+    },
     staleTime: 30_000,
   });
 
-  const queryByKey: Record<ReadingPartKey, typeof queryPart1a> = {
-    reading_part_1a: queryPart1a,
-    reading_part_1b: queryPart1b,
-    reading_part_2:  queryPart2,
-    reading_part_3:  queryPart3,
-    reading_part_4:  queryPart4,
+  const queryPart1a = useQuery({ ...makeQuery("part1a"), enabled: activeTab === "part1a" });
+  const queryPart1b = useQuery({ ...makeQuery("part1b"), enabled: activeTab === "part1b" });
+  const queryPart2  = useQuery({ ...makeQuery("part2"),  enabled: activeTab === "part2"  });
+  const queryPart3  = useQuery({ ...makeQuery("part3"),  enabled: activeTab === "part3"  });
+  const queryPart4  = useQuery({ ...makeQuery("part4"),  enabled: activeTab === "part4"  });
+
+  const queryByKey: Record<PartType, typeof queryPart1a> = {
+    part1a: queryPart1a,
+    part1b: queryPart1b,
+    part2:  queryPart2,
+    part3:  queryPart3,
+    part4:  queryPart4,
   };
 
   const activeResult = queryByKey[activeTab];
-  const activeQuestions: WritingQuestion[] = (activeResult.data as WritingQuestion[] | undefined) ?? [];
+  const activeQuestions: ReadingQuestion[] = activeResult.data ?? [];
 
   const filteredQuestions = React.useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return activeQuestions;
-    return activeQuestions.filter((q) => q.question_text.toLowerCase().includes(s));
+    return activeQuestions.filter((q) =>
+      (q.title || "").toLowerCase().includes(s) ||
+      (q.passage || "").toLowerCase().includes(s)
+    );
   }, [activeQuestions, search]);
 
-  const counts: Record<ReadingPartKey, number> = {
-    reading_part_1a: (queryPart1a.data as WritingQuestion[] | undefined)?.length ?? 0,
-    reading_part_1b: (queryPart1b.data as WritingQuestion[] | undefined)?.length ?? 0,
-    reading_part_2:  (queryPart2.data as WritingQuestion[] | undefined)?.length ?? 0,
-    reading_part_3:  (queryPart3.data as WritingQuestion[] | undefined)?.length ?? 0,
-    reading_part_4:  (queryPart4.data as WritingQuestion[] | undefined)?.length ?? 0,
+  const counts: Record<PartType, number> = {
+    part1a: queryPart1a.data?.length ?? 0,
+    part1b: queryPart1b.data?.length ?? 0,
+    part2:  queryPart2.data?.length  ?? 0,
+    part3:  queryPart3.data?.length  ?? 0,
+    part4:  queryPart4.data?.length  ?? 0,
   };
 
   const totalCount = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -311,8 +289,7 @@ export function AdminReadingPage() {
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const createMutation = useMutation({
-    mutationFn: (payload: { task_type: string; question_text: string; image_path?: string }) =>
-      api.writing.create(payload),
+    mutationFn: (body: Partial<ReadingQuestion>) => api.reading.create(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "reading-questions", dialogPartKey] });
       closeDialog();
@@ -320,8 +297,8 @@ export function AdminReadingPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<WritingQuestion> }) =>
-      api.writing.update(id, body),
+    mutationFn: ({ id, body }: { id: string; body: Partial<ReadingQuestion> }) =>
+      api.reading.update(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "reading-questions", dialogPartKey] });
       closeDialog();
@@ -329,7 +306,7 @@ export function AdminReadingPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.writing.delete(id),
+    mutationFn: (id: string) => api.reading.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "reading-questions", activeTab] });
       setDeleteId(null);
@@ -338,20 +315,22 @@ export function AdminReadingPage() {
 
   // ─── Dialog helpers ────────────────────────────────────────────────────────
 
-  function openAdd(partKey: ReadingPartKey) {
+  function openAdd(partKey: PartType) {
     setEditRow(null);
     setDialogPartKey(partKey);
     setForm(emptyForm);
+    setJsonError(null);
     setDialogOpen(true);
   }
 
-  function openEdit(row: WritingQuestion) {
+  function openEdit(row: ReadingQuestion) {
     setEditRow(row);
-    setDialogPartKey(row.task_type as ReadingPartKey);
+    setDialogPartKey(row.part_type as PartType);
     setForm({
-      question_text: row.question_text,
-      image_path: prettyJson(row.image_path ?? ""),
+      title: row.title || row.passage || "",
+      questions_json: prettyJson(row.questions as object[] | null),
     });
+    setJsonError(null);
     setDialogOpen(true);
   }
 
@@ -359,21 +338,31 @@ export function AdminReadingPage() {
     setDialogOpen(false);
     setEditRow(null);
     setForm(emptyForm);
+    setJsonError(null);
   }
 
   function handleSave() {
-    const imagePathVal = form.image_path.trim() || undefined;
+    const questionsData = form.questions_json.trim()
+      ? parseJson(form.questions_json)
+      : null;
+
+    if (form.questions_json.trim() && questionsData === null) {
+      setJsonError("Invalid JSON — please check the questions field.");
+      return;
+    }
+    setJsonError(null);
+
+    const body: Partial<ReadingQuestion> = {
+      part_type: dialogPartKey as ReadingQuestion["part_type"],
+      title: form.title,
+      passage: form.title,
+      questions: (questionsData as object[]) ?? [],
+    };
+
     if (editRow) {
-      updateMutation.mutate({
-        id: editRow.id,
-        body: { question_text: form.question_text, image_path: imagePathVal ?? null },
-      });
+      updateMutation.mutate({ id: editRow.id, body });
     } else {
-      createMutation.mutate({
-        task_type: dialogPartKey,
-        question_text: form.question_text,
-        image_path: imagePathVal,
-      });
+      createMutation.mutate(body);
     }
   }
 
@@ -419,7 +408,7 @@ export function AdminReadingPage() {
       {/* Tabs */}
       <TabsPrimitive.Root
         value={activeTab}
-        onValueChange={(v) => { setActiveTab(v as ReadingPartKey); setSearch(""); }}
+        onValueChange={(v) => { setActiveTab(v as PartType); setSearch(""); }}
       >
         <TabsPrimitive.List className="flex border-b flex-wrap">
           {READING_PARTS.map(({ key, shortLabel }) => (
@@ -499,6 +488,9 @@ export function AdminReadingPage() {
           </DialogHeader>
           <div className="py-2">
             <PartFormFields partKey={dialogPartKey} form={form} onChange={setForm} />
+            {jsonError && (
+              <p className="mt-3 text-xs text-red-600">{jsonError}</p>
+            )}
             {saveError && (
               <p className="mt-3 text-xs text-red-600">
                 Error: {(saveError as Error)?.message ?? "Save failed"}
@@ -511,7 +503,7 @@ export function AdminReadingPage() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!form.question_text.trim() || isSaving}
+              disabled={!form.title.trim() || isSaving}
             >
               {isSaving ? "Saving…" : editRow ? "Save Changes" : "Add Question"}
             </Button>

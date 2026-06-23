@@ -3,30 +3,29 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/lib/supabase/client";
-import { Users, CreditCard, Mic, BookOpen, PenLine, Headphones, Plus, UserCog, ClipboardPlus, FileText, FlaskConical } from "lucide-react";
+import { Users, Mic, BookOpen, PenLine, Headphones, Plus, UserCog, ClipboardPlus, FileText } from "lucide-react";
 export function AdminDashboardPage() {
   const navigate = useNavigate();
 
   const stats = useQuery({
     queryKey: ["lc", "admin", "dashboard-stats"],
     queryFn: async () => {
-      const [users, subs, questions, speaking, reading, writing, listening] = await Promise.all([
-        supabase.from("user_profiles").select("id", { count: "exact", head: true }),
-        supabase.from("subscriptions").select("id", { count: "exact", head: true }).eq("status", "active"),
-        supabase.from("questions").select("id", { count: "exact", head: true }),
-        supabase.from("questions").select("id", { count: "exact", head: true }).eq("section", "speaking"),
-        supabase.from("questions").select("id", { count: "exact", head: true }).eq("section", "reading"),
-        supabase.from("questions").select("id", { count: "exact", head: true }).eq("section", "writing"),
-        supabase.from("questions").select("id", { count: "exact", head: true }).eq("section", "listening"),
+      const [users, speaking, reading, writing, listening] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("speaking_part_questions").select("id", { count: "exact", head: true }).eq("is_published", true),
+        supabase.from("reading_part_questions").select("id", { count: "exact", head: true }).eq("is_active", true),
+        supabase.from("writing_task_questions").select("id", { count: "exact", head: true }),
+        supabase.from("listening_part_questions").select("id", { count: "exact", head: true }),
       ]);
+      const totalQ = (speaking.count ?? 0) + (reading.count ?? 0) + (writing.count ?? 0) + (listening.count ?? 0);
       return {
         totalUsers: users.count ?? 0,
-        usersGrowth: "+8%",
-        activeSubs: subs.count ?? 0,
-        totalSubs: (subs.count ?? 0) + 66,
-        subsGrowth: "+15%",
-        totalQuestions: questions.count ?? 0,
-        questionsGrowth: "+12%",
+        usersGrowth: "",
+        activeSubs: 0,
+        totalSubs: 0,
+        subsGrowth: "",
+        totalQuestions: totalQ,
+        questionsGrowth: "",
         mockTests: 0,
         speaking: speaking.count ?? 0,
         reading: reading.count ?? 0,
@@ -58,19 +57,19 @@ export function AdminDashboardPage() {
       growth: "text-green-600",
     },
     {
-      label: "Active Subscriptions",
-      value: s?.activeSubs ?? 0,
-      sub: `of ${s?.totalSubs ?? 0} total ${s?.subsGrowth ?? ""}`,
-      icon: CreditCard,
+      label: "Reading Questions",
+      value: s?.reading ?? 0,
+      sub: "Active reading sets",
+      icon: BookOpen,
       iconBg: "bg-green-50",
       iconColor: "text-green-500",
       growth: "text-green-600",
     },
     {
-      label: "Mock Tests",
-      value: s?.mockTests ?? 0,
-      sub: "Available tests",
-      icon: FlaskConical,
+      label: "Listening Questions",
+      value: s?.listening ?? 0,
+      sub: "Listening sets",
+      icon: Headphones,
       iconBg: "bg-orange-50",
       iconColor: "text-orange-500",
       growth: "",

@@ -51,6 +51,41 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
   return json as T;
 }
 
+async function requestForm<T = unknown>(path: string, formData: FormData): Promise<T> {
+  if (isProductionMisconfigured()) {
+    throw new Error(
+      "Production API is misconfigured (localhost URL). Set VITE_API_URL=/api/v1 on Vercel or remove it to use the proxy.",
+    );
+  }
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch (error) {
+    const hint =
+      import.meta.env.PROD && BASE_URL.startsWith("/")
+        ? " Check Vercel env BACKEND_URL points to your live Railway domain."
+        : " Is the backend running on port 5000?";
+    throw new Error(`Network error calling API${hint} (${error instanceof Error ? error.message : String(error)})`);
+  }
+
+  let json: { message?: string };
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Invalid API response (${res.status}) from ${BASE_URL}${path}`);
+  }
+
+  if (!res.ok) throw new Error(json.message || "Request failed");
+  return json as T;
+}
+
 function qs(params?: Record<string, string | number | boolean | undefined>): string {
   if (!params) return "";
   const q = new URLSearchParams(
@@ -155,6 +190,17 @@ export interface MockTest {
   created_by: string | null;
   created_at: string;
   updated_at: string | null;
+  listening_part1_id?: string | null;
+  listening_part2_id?: string | null;
+  listening_part3_id?: string | null;
+  listening_part4_id?: string | null;
+  reading_part1a_id?: string | null;
+  reading_part1b_id?: string | null;
+  reading_part2_id?: string | null;
+  reading_part3_id?: string | null;
+  reading_part4_id?: string | null;
+  writing_task1_id?: string | null;
+  writing_task2_id?: string | null;
 }
 
 // Student Access
@@ -633,7 +679,46 @@ export const api = {
   speaking: {
     list: (params?: { part_number?: number }) =>
       request<ApiResponse<SpeakingQuestion[]>>(`/questions/speaking${qs(params)}`),
+    listAll: (params?: { part_number?: number }) =>
+      request<ApiResponse<SpeakingQuestion[]>>(
+        `/questions/speaking${qs({ ...params, include_all: true })}`,
+      ),
     get: (id: string) => request<ApiResponse<SpeakingQuestion>>(`/questions/speaking/${id}`),
+    create: (body: {
+      title: string;
+      task_type: string;
+      part_number?: number;
+      level?: string;
+      content?: string | null;
+      audio_url?: string | null;
+      image_url?: string | null;
+      max_score?: number;
+      is_published?: boolean;
+    }) =>
+      request<ApiResponse<SpeakingQuestion>>("/questions/speaking", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    update: (
+      id: string,
+      body: Partial<{
+        title: string;
+        task_type: string;
+        part_number: number;
+        level: string;
+        content: string | null;
+        audio_url: string | null;
+        image_url: string | null;
+        max_score: number;
+        is_published: boolean;
+      }>,
+    ) =>
+      request<ApiResponse<SpeakingQuestion>>(`/questions/speaking/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    delete: (id: string) =>
+      request<ApiResponse<{ message: string }>>(`/questions/speaking/${id}`, { method: "DELETE" }),
   },
 
   // ─── Reading Questions ────────────────────────────────────────────────────
@@ -660,10 +745,18 @@ export const api = {
   // ─── Mock Tests ───────────────────────────────────────────────────────────
   tests: {
     list: () => request<ApiResponse<{ tests: MockTest[]; total: number }>>("/tests"),
+    listAll: () =>
+      request<ApiResponse<{ tests: MockTest[]; total: number }>>("/tests?include_all=true"),
     get: (id: string) => request<ApiResponse<MockTest>>(`/tests/${id}`),
-    structure: (id: string) => request<ApiResponse<unknown>>(`/tests/${id}/structure`),
-    create: (body: { title: string; description?: string }) =>
+    structure: (id: string) =>
+      request<ApiResponse<import("./mockTestTypes").MockTestStructure>>(`/tests/${id}/structure`),
+    create: (body: Partial<MockTest> & { title: string }) =>
       request<ApiResponse<MockTest>>("/tests", { method: "POST", body: JSON.stringify(body) }),
+    assembleRandom: (body?: { title?: string; description?: string }) =>
+      request<ApiResponse<MockTest>>("/tests/assemble-random", {
+        method: "POST",
+        body: JSON.stringify(body ?? {}),
+      }),
     update: (id: string, body: Partial<MockTest>) =>
       request<ApiResponse<MockTest>>(`/tests/${id}`, { method: "PUT", body: JSON.stringify(body) }),
     delete: (id: string) =>
@@ -675,9 +768,20 @@ export const api = {
     saveAttempt: (body: { question_type: string; question_set_id: string; score: number; total: number }) =>
       request<ApiResponse<{ id: string }>>("/practice/attempts", { method: "POST", body: JSON.stringify(body) }),
     myAttempts: (question_type?: string) =>
-      request<ApiResponse<{ id: string; question_type: string; question_set_id: string; score: number; total: number; created_at: string }[]>>(
-        `/practice/attempts/mine${qs({ question_type })}`
-      ),
+      request<
+        ApiResponse<
+          {
+            id: string;
+            question_type: string;
+            question_set_id: string;
+            score: number;
+            total: number;
+            scoring_status?: string;
+            score_details?: object;
+            created_at: string;
+          }[]
+        >
+      >(`/practice/attempts/mine${qs({ question_type })}`),
     progress: () =>
       request<
         ApiResponse<{
@@ -690,6 +794,35 @@ export const api = {
           overall: { total: number; practiced: number };
         }>
       >("/practice/progress"),
+  },
+
+  // ─── AI Scoring ─────────────────────────────────────────────────────────
+  scoring: {
+    writing: (body: {
+      question_text: string;
+      candidate_response: string;
+      level: string;
+      task_type: "task1" | "task2";
+      attempt_id?: string;
+    }) =>
+      request<ApiResponse<import("./scoringTypes").WritingScoreResult>>("/scoring/writing", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    speakingAudio: (formData: FormData) =>
+      requestForm<ApiResponse<import("./scoringTypes").SpeakingScoreResult>>("/scoring/speaking/audio", formData),
+    attempt: (attemptId: string) =>
+      request<
+        ApiResponse<{
+          id: string;
+          score: number;
+          total: number;
+          score_details: object | null;
+          scoring_status: string;
+          question_type: string;
+          created_at: string;
+        }>
+      >(`/scoring/attempt/${attemptId}`),
   },
 
   // ─── Users ───────────────────────────────────────────────────────────────

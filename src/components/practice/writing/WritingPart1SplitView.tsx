@@ -1,4 +1,5 @@
 import { BarChart3, CheckCircle2, FileText, PenLine, RotateCcw } from "lucide-react";
+import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WritingRichEditor } from "@/components/practice/writing/WritingRichEditor";
@@ -112,6 +113,7 @@ export function WritingPart1AnswerPanel({
   attemptKey,
   onChange,
   onRetry,
+  scoreSlot,
 }: {
   minWords: number;
   maxWords: number;
@@ -121,6 +123,7 @@ export function WritingPart1AnswerPanel({
   attemptKey: string;
   onChange: (text: string) => void;
   onRetry: () => void;
+  scoreSlot?: React.ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -143,19 +146,21 @@ export function WritingPart1AnswerPanel({
 
       <div className="min-h-0 flex-1">
         {submitted ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white px-6 py-10 text-center shadow-sm">
-            <div className="flex size-14 items-center justify-center rounded-full bg-emerald-100">
-              <CheckCircle2 className="size-7 text-emerald-600" />
+          scoreSlot ?? (
+            <div className="flex h-full flex-col items-center justify-center rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white px-6 py-10 text-center shadow-sm">
+              <div className="flex size-14 items-center justify-center rounded-full bg-emerald-100">
+                <CheckCircle2 className="size-7 text-emerald-600" />
+              </div>
+              <p className="mt-4 text-lg font-bold text-emerald-800">Answer submitted</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Your response has been saved ({wordCount} words).
+              </p>
+              <Button onClick={onRetry} variant="outline" size="sm" className="mt-5 gap-2">
+                <RotateCcw className="size-3.5" />
+                Re-do this task
+              </Button>
             </div>
-            <p className="mt-4 text-lg font-bold text-emerald-800">Answer submitted</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Your response has been saved ({wordCount} words).
-            </p>
-            <Button onClick={onRetry} variant="outline" size="sm" className="mt-5 gap-2">
-              <RotateCcw className="size-3.5" />
-              Re-do this task
-            </Button>
-          </div>
+          )
         ) : (
           <WritingRichEditor
             value={text}

@@ -24,9 +24,13 @@ type Props = {
   prepareSecondsLeft: number;
   recordSecondsLeft: number;
   maxDuration: number;
+  audioStream?: MediaStream | null;
+  micReady?: boolean;
+  micError?: string | null;
   onStartPreparing: () => void;
   onStartRecording: () => void;
   onRecordingComplete: (blob: Blob) => void;
+  onRetryMic?: () => void;
 };
 
 export function SpeakingQuestionPanel({
@@ -38,9 +42,13 @@ export function SpeakingQuestionPanel({
   prepareSecondsLeft,
   recordSecondsLeft,
   maxDuration,
+  audioStream,
+  micReady,
+  micError,
   onStartPreparing,
   onStartRecording,
   onRecordingComplete,
+  onRetryMic,
 }: Props) {
   const imageSrc = question.image_url
     ? question.image_url.startsWith("http")
@@ -97,8 +105,12 @@ export function SpeakingQuestionPanel({
         prepareSecondsLeft={prepareSecondsLeft}
         recordSecondsLeft={recordSecondsLeft}
         maxDuration={maxDuration}
+        audioStream={audioStream}
+        micReady={micReady}
+        micError={micError}
         onStartRecording={onStartRecording}
         onRecordingComplete={onRecordingComplete}
+        onRetryMic={onRetryMic}
       />
     </div>
   );

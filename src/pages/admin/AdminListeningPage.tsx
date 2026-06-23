@@ -72,7 +72,7 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
   const q = useQuery({
     queryKey: ["admin", "listening", partNumber],
     queryFn: async () => {
-      const res = await api.listening.list({ part_number: partNumber });
+      const res = await api.listening.list({ part_number: partNumber, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
   });
@@ -97,6 +97,8 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice-questions", "listening", String(partNumber)] });
       setDialogOpen(false);
       setForm(emptyForm);
     },
@@ -122,6 +124,8 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice-questions", "listening", String(partNumber)] });
       setDialogOpen(false);
       setEditRow(null);
       setForm(emptyForm);
@@ -137,6 +141,8 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
     mutationFn: (id: string) => api.listening.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice", "listening", partNumber] });
+      qc.invalidateQueries({ queryKey: ["practice-questions", "listening", String(partNumber)] });
       setDeleteId(null);
     },
   });
@@ -343,7 +349,7 @@ function PartStatCard({
   const q = useQuery({
     queryKey: ["admin", "listening", partNumber],
     queryFn: async () => {
-      const res = await api.listening.list({ part_number: partNumber });
+      const res = await api.listening.list({ part_number: partNumber, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
   });

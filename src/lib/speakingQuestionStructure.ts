@@ -1,7 +1,8 @@
 import type { SpeakingQuestion } from "@/lib/api";
 import { getSpeakingExaminerAudioUrl } from "@/lib/speakingAudio";
 
-export const SPEAKING_DEFAULT_MAX_SCORE = 90;
+/** LanguageCert speaking is scored 0–50 (12 raw marks scaled). */
+export const SPEAKING_DEFAULT_MAX_SCORE = 50;
 export const SPEAKING_DEFAULT_LEVEL = "B1";
 
 export const SPEAKING_UNIVERSAL_INSTRUCTION =

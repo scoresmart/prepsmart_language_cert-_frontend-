@@ -70,8 +70,8 @@ export function SpeakingSidebar({
           </div>
         </dl>
         <div className="mt-auto pt-6 text-xs leading-relaxed text-slate-400">
-          Listen to the examiner first. After the audio ends you have 5 seconds to prepare — recording
-          starts automatically, or tap Start Recording to begin early.
+          Allow microphone access when prompted. Listen to the examiner first — after the audio ends
+          you have 5 seconds to prepare, then recording starts automatically once the mic is enabled.
         </div>
       </div>
     </aside>

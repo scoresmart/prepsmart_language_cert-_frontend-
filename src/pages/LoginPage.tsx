@@ -6,10 +6,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, supabaseConfigured } from "@/lib/supabase/client";
 import { useAuth } from "@/providers/AuthContext";
-
-const ADMIN_EMAILS = ["contact@scoresmartpte.com"];
+import { isAdminEmail } from "@/lib/adminAccess";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -30,11 +29,15 @@ export function LoginPage() {
   const form = useForm<Form>({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } });
 
   if (!loading && user) {
-    const isAdmin = ADMIN_EMAILS.includes((user.email ?? "").toLowerCase());
+    const isAdmin = isAdminEmail(user.email);
     return <Navigate to={isAdmin ? "/admin/dashboard" : from} replace />;
   }
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (!supabaseConfigured) {
+      toast.error("Login is unavailable: Supabase env vars are missing on this deployment.");
+      return;
+    }
     if (!agreed) {
       toast.error("Please agree to the Terms & Conditions and Privacy Policy");
       return;
@@ -45,8 +48,7 @@ export function LoginPage() {
       return;
     }
     toast.success("Signed in successfully!");
-    const email = data.user?.email ?? "";
-    const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+    const isAdmin = isAdminEmail(data.user?.email);
     navigate(isAdmin ? "/admin/dashboard" : from, { replace: true });
   });
 
@@ -116,6 +118,14 @@ export function LoginPage() {
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">PrepSmart LC — Practice Language Cert like a real exam</p>
             </div>
+
+            {!supabaseConfigured && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                Login is not configured on this deployment. In Vercel, set{" "}
+                <span className="font-semibold">VITE_SUPABASE_URL</span> and{" "}
+                <span className="font-semibold">VITE_SUPABASE_ANON_KEY</span>, then redeploy.
+              </div>
+            )}
 
             <form className="space-y-4" onSubmit={onSubmit}>
               {/* Email */}

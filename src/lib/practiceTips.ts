@@ -21,10 +21,10 @@ export const PRACTICE_TIPS: Record<string, string[]> = {
     "If you miss an answer, move on — don't lose the next one.",
   ],
   speaking: [
-    "Speak clearly at a natural pace.",
-    "Use full sentences, not single-word replies.",
-    "Pause briefly to organise your thoughts.",
-    "Answer all parts of the prompt.",
-    "Practice recording yourself to build confidence.",
+    "Part 1: personal info — Part 2: role plays — Part 3: discussion — Part 4: long turn (30s prep).",
+    "Scored on 4 criteria (0–3 each), scaled to 50. Pass 25+, High Pass 38+.",
+    "Use connectors and full sentences — link your ideas clearly.",
+    "Match vocabulary and grammar to the CEFR level shown on the question.",
+    "Speak at a natural pace with clear pronunciation and intonation.",
   ],
 };

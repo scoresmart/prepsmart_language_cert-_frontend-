@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, Sparkles, ExternalLink, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { api, type MockTest, type ListeningQuestion, type WritingQuestion } from "@/lib/api";
+import {
+  MOCK_LISTENING_PARTS,
+  MOCK_READING_PARTS,
+  MOCK_WRITING_TASKS,
+  MOCK_TOTALS,
+} from "@/lib/mockTestFormat";
+import { mockTestIntroUrl } from "@/lib/mockTestRoutes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +44,7 @@ type FullMockTest = MockTest & {
 
 type AssemblyForm = {
   title: string;
+  description: string;
   is_active: boolean;
   listening_part1_id: string;
   listening_part2_id: string;
@@ -53,6 +61,7 @@ type AssemblyForm = {
 
 const emptyForm: AssemblyForm = {
   title: "",
+  description: "",
   is_active: true,
   listening_part1_id: "",
   listening_part2_id: "",
@@ -83,6 +92,35 @@ function filledCount(row: FullMockTest): number {
     "writing_task2_id",
   ];
   return keys.filter((k) => row[k] != null && row[k] !== "").length;
+}
+
+function pickRandom<T extends { id: string }>(items: T[]): string {
+  if (items.length === 0) return "";
+  return items[Math.floor(Math.random() * items.length)].id;
+}
+
+function autoFillRandomForm(
+  form: AssemblyForm,
+  allListening: ListeningQuestion[],
+  allWriting: WritingQuestion[],
+): AssemblyForm {
+  const lPart = (n: number) => allListening.filter((q) => q.part_number === n);
+  const wByType = (type: string) => allWriting.filter((q) => (q.task_type as string) === type);
+
+  return {
+    ...form,
+    listening_part1_id: pickRandom(lPart(1)),
+    listening_part2_id: pickRandom(lPart(2)),
+    listening_part3_id: pickRandom(lPart(3)),
+    listening_part4_id: pickRandom(lPart(4)),
+    reading_part1a_id: pickRandom(wByType("reading_part_1a")),
+    reading_part1b_id: pickRandom(wByType("reading_part_1b")),
+    reading_part2_id: pickRandom(wByType("reading_part_2")),
+    reading_part3_id: pickRandom(wByType("reading_part_3")),
+    reading_part4_id: pickRandom(wByType("reading_part_4")),
+    writing_task1_id: pickRandom(wByType("task1")),
+    writing_task2_id: pickRandom(wByType("task2")),
+  };
 }
 
 // ─── Select helper ────────────────────────────────────────────────────────────
@@ -134,7 +172,7 @@ export function AdminMockTestsPage() {
   const testsQuery = useQuery({
     queryKey: ["admin", "mock-tests"],
     queryFn: async () => {
-      const res = await api.tests.list();
+      const res = await api.tests.listAll();
       return (res.data?.tests ?? []) as FullMockTest[];
     },
   });
@@ -181,13 +219,19 @@ export function AdminMockTestsPage() {
 
   const createMutation = useMutation({
     mutationFn: (f: AssemblyForm) =>
-      api.tests.create({ title: f.title } as Parameters<typeof api.tests.create>[0]),
-    onSuccess: async (res) => {
-      // After create, immediately patch in the question IDs
-      const id = (res.data as MockTest).id;
-      await api.tests.update(id, buildUpdatePayload(form) as Parameters<typeof api.tests.update>[1]);
+      api.tests.create(buildUpdatePayload(f) as Partial<MockTest> & { title: string }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      qc.invalidateQueries({ queryKey: ["mock-tests"] });
       closeDialog();
+    },
+  });
+
+  const randomMutation = useMutation({
+    mutationFn: (body?: { title?: string; description?: string }) => api.tests.assembleRandom(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      qc.invalidateQueries({ queryKey: ["mock-tests"] });
     },
   });
 
@@ -196,6 +240,7 @@ export function AdminMockTestsPage() {
       api.tests.update(id, buildUpdatePayload(f) as Parameters<typeof api.tests.update>[1]),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      qc.invalidateQueries({ queryKey: ["mock-tests"] });
       closeDialog();
     },
   });
@@ -204,6 +249,7 @@ export function AdminMockTestsPage() {
     mutationFn: (id: string) => api.tests.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "mock-tests"] });
+      qc.invalidateQueries({ queryKey: ["mock-tests"] });
       setDeleteId(null);
     },
   });
@@ -213,6 +259,7 @@ export function AdminMockTestsPage() {
     const nullify = (v: string) => v || null;
     return {
       title: f.title,
+      description: f.description.trim() || null,
       is_active: f.is_active,
       listening_part1_id: nullify(f.listening_part1_id),
       listening_part2_id: nullify(f.listening_part2_id),
@@ -246,6 +293,7 @@ export function AdminMockTestsPage() {
     setEditRow(row);
     setForm({
       title: row.title,
+      description: row.description ?? "",
       is_active: row.is_active,
       listening_part1_id: row.listening_part1_id ?? "",
       listening_part2_id: row.listening_part2_id ?? "",
@@ -270,7 +318,19 @@ export function AdminMockTestsPage() {
     }
   };
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending || randomMutation.isPending;
+
+  const handleAutoFill = () => {
+    setForm((prev) => autoFillRandomForm(prev, allListening, allWriting));
+  };
+
+  const handleQuickRandom = () => {
+    const n = tests.length + 1;
+    randomMutation.mutate({
+      title: `LanguageCert Mock Test ${n}`,
+      description: "Full International ESOL format — Listening, Reading, Writing (+ Speaking from practice bank).",
+    });
+  };
 
   // ── Field updater shorthand ──
   const setField =
@@ -288,14 +348,52 @@ export function AdminMockTestsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">Mock Tests</h1>
-            <p className="text-sm text-slate-500">Manage language_cert_mock_tests</p>
+            <p className="text-sm text-slate-500">
+              Assemble LanguageCert format tests — visible on student portal when Active
+            </p>
           </div>
         </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="size-4" />
-          Create Mock Test
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleQuickRandom}
+            disabled={randomMutation.isPending}
+            className="gap-2"
+          >
+            <Sparkles className="size-4" />
+            {randomMutation.isPending ? "Creating…" : "Quick random mock test"}
+          </Button>
+          <Button onClick={openAdd} className="gap-2">
+            <Plus className="size-4" />
+            Create Mock Test
+          </Button>
+        </div>
       </div>
+
+      {/* Format reference */}
+      <Card className="border border-indigo-100 bg-indigo-50/40 shadow-sm">
+        <CardContent className="p-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">LanguageCert format</p>
+          <div className="mt-3 grid gap-3 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="font-semibold text-cyan-800">Listening · {MOCK_TOTALS.listening} q</p>
+              <p className="text-xs text-slate-600">{MOCK_LISTENING_PARTS.map((p) => p.label).join(", ")}</p>
+            </div>
+            <div>
+              <p className="font-semibold text-emerald-800">Reading · {MOCK_TOTALS.reading} q</p>
+              <p className="text-xs text-slate-600">{MOCK_READING_PARTS.map((p) => p.label).join(", ")}</p>
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800">Writing · 2 tasks</p>
+              <p className="text-xs text-slate-600">{MOCK_WRITING_TASKS.map((p) => `${p.label} (${p.words} words)`).join(" · ")}</p>
+            </div>
+            <div>
+              <p className="font-semibold text-violet-800">Speaking · 4 parts</p>
+              <p className="text-xs text-slate-600">Uses practice speaking bank in mock runner</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stat card */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -385,6 +483,17 @@ export function AdminMockTestsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
+                            {row.is_active && (
+                              <a
+                                href={mockTestIntroUrl(row.id)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-md p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-700 transition"
+                                title="View on student portal"
+                              >
+                                <ExternalLink className="size-3.5" />
+                              </a>
+                            )}
                             <button
                               onClick={() => openEdit(row)}
                               className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
@@ -416,9 +525,19 @@ export function AdminMockTestsPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editRow ? "Edit Mock Test" : "Create Mock Test"}</DialogTitle>
+            <p className="text-xs text-slate-500">
+              Pick one question set per section. Active tests appear at /mock-tests on the student portal.
+            </p>
           </DialogHeader>
 
           <div className="space-y-6 py-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="gap-2" onClick={handleAutoFill}>
+                <Shuffle className="size-3.5" />
+                Auto-fill random questions
+              </Button>
+            </div>
+
             {/* Basic Info */}
             <div>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -428,9 +547,17 @@ export function AdminMockTestsPage() {
                 <div className="space-y-1.5">
                   <Label>Title *</Label>
                   <Input
-                    placeholder="e.g. Mock Test 1"
+                    placeholder="e.g. LanguageCert Mock Test 1"
                     value={form.title}
                     onChange={(e) => setField("title")(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Description</Label>
+                  <Input
+                    placeholder="Short note for students (optional)"
+                    value={form.description}
+                    onChange={(e) => setField("description")(e.target.value)}
                   />
                 </div>
                 <div className="flex items-center gap-3">
@@ -445,33 +572,34 @@ export function AdminMockTestsPage() {
 
             {/* Listening */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Listening
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                Listening · {MOCK_TOTALS.listening} questions
               </h3>
+              <p className="mb-3 text-[11px] text-slate-500">Parts 1–4 — MCQs and note completion</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <SelectField
-                  label="Part 1 – Short Exchanges"
+                  label={`${MOCK_LISTENING_PARTS[0].label} (${MOCK_LISTENING_PARTS[0].questions} q)`}
                   value={form.listening_part1_id}
                   onChange={setField("listening_part1_id")}
                   options={lPart(1)}
                   loading={listeningQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 2 – Conversations"
+                  label={`${MOCK_LISTENING_PARTS[1].label} (${MOCK_LISTENING_PARTS[1].questions} q)`}
                   value={form.listening_part2_id}
                   onChange={setField("listening_part2_id")}
                   options={lPart(2)}
                   loading={listeningQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 3 – Note Completion"
+                  label={`${MOCK_LISTENING_PARTS[2].label} (${MOCK_LISTENING_PARTS[2].questions} q)`}
                   value={form.listening_part3_id}
                   onChange={setField("listening_part3_id")}
                   options={lPart(3)}
                   loading={listeningQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 4 – Extended Discussion"
+                  label={`${MOCK_LISTENING_PARTS[3].label} (${MOCK_LISTENING_PARTS[3].questions} q)`}
                   value={form.listening_part4_id}
                   onChange={setField("listening_part4_id")}
                   options={lPart(4)}
@@ -482,40 +610,41 @@ export function AdminMockTestsPage() {
 
             {/* Reading */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Reading
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                Reading · {MOCK_TOTALS.reading} questions
               </h3>
+              <p className="mb-3 text-[11px] text-slate-500">Parts 1A–4 — MCQ, gap-fill, matching, short answer</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <SelectField
-                  label="Part 1A"
+                  label={`${MOCK_READING_PARTS[0].label} (${MOCK_READING_PARTS[0].questions} q)`}
                   value={form.reading_part1a_id}
                   onChange={setField("reading_part1a_id")}
                   options={wByType("reading_part_1a")}
                   loading={writingQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 1B"
+                  label={`${MOCK_READING_PARTS[1].label} (${MOCK_READING_PARTS[1].questions} q)`}
                   value={form.reading_part1b_id}
                   onChange={setField("reading_part1b_id")}
                   options={wByType("reading_part_1b")}
                   loading={writingQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 2"
+                  label={`${MOCK_READING_PARTS[2].label} (${MOCK_READING_PARTS[2].questions} q)`}
                   value={form.reading_part2_id}
                   onChange={setField("reading_part2_id")}
                   options={wByType("reading_part_2")}
                   loading={writingQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 3"
+                  label={`${MOCK_READING_PARTS[3].label} (${MOCK_READING_PARTS[3].questions} q)`}
                   value={form.reading_part3_id}
                   onChange={setField("reading_part3_id")}
                   options={wByType("reading_part_3")}
                   loading={writingQuery.isLoading}
                 />
                 <SelectField
-                  label="Part 4"
+                  label={`${MOCK_READING_PARTS[4].label} (${MOCK_READING_PARTS[4].questions} q)`}
                   value={form.reading_part4_id}
                   onChange={setField("reading_part4_id")}
                   options={wByType("reading_part_4")}
@@ -526,19 +655,20 @@ export function AdminMockTestsPage() {
 
             {/* Writing */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Writing
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Writing · 2 tasks
               </h3>
+              <p className="mb-3 text-[11px] text-slate-500">Task 1 formal · Task 2 informal (AI scored)</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <SelectField
-                  label="Task 1"
+                  label={`${MOCK_WRITING_TASKS[0].label} (${MOCK_WRITING_TASKS[0].words} words)`}
                   value={form.writing_task1_id}
                   onChange={setField("writing_task1_id")}
                   options={wByType("task1")}
                   loading={writingQuery.isLoading}
                 />
                 <SelectField
-                  label="Task 2"
+                  label={`${MOCK_WRITING_TASKS[1].label} (${MOCK_WRITING_TASKS[1].words} words)`}
                   value={form.writing_task2_id}
                   onChange={setField("writing_task2_id")}
                   options={wByType("task2")}
