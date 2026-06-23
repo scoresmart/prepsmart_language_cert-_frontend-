@@ -42,7 +42,10 @@ export function LoginPage() {
       toast.error("Please agree to the Terms & Conditions and Privacy Policy");
       return;
     }
-    const { error, data } = await supabase.auth.signInWithPassword(values);
+    const { error, data } = await supabase.auth.signInWithPassword({
+      email: values.email.trim().toLowerCase(),
+      password: values.password.trim(),
+    });
     if (error) {
       toast.error(error.message);
       return;
