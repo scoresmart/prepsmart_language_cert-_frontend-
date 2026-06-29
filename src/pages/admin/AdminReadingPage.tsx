@@ -247,7 +247,7 @@ export function AdminReadingPage() {
       const res = await api.reading.list({ part_type: partType, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 
   const queryPart1a = useQuery({ ...makeQuery("part1a"), enabled: activeTab === "part1a" });
@@ -462,7 +462,7 @@ export function AdminReadingPage() {
               )}
 
               {/* Table */}
-              {activeResult.isLoading && key === activeTab ? (
+              {activeResult.isLoading && !activeResult.data && key === activeTab ? (
                 <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
               ) : (
                 <QuestionTable

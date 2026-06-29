@@ -1,6 +1,7 @@
 import { AlertCircle, Loader2, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PracticeGrade, ScoringPhase, SpeakingScoreResult, WritingScoreResult } from "@/lib/scoringTypes";
+import { WritingErrorsPanel } from "@/components/practice/writing/WritingErrorsPanel";
 
 function formatScoringError(error?: string | null): string {
   if (!error) return "Please try again in a moment.";
@@ -44,12 +45,16 @@ export function PracticeScoreResult({
   error,
   writing,
   speaking,
+  responseText,
+  recordingUrl,
   className,
 }: {
   phase: ScoringPhase;
   error?: string | null;
   writing?: WritingScoreResult | null;
   speaking?: SpeakingScoreResult | null;
+  responseText?: string;
+  recordingUrl?: string | null;
   className?: string;
 }) {
   if (phase === "idle") return null;
@@ -60,7 +65,9 @@ export function PracticeScoreResult({
         <Loader2 className="size-8 animate-spin text-violet-600" />
         <p className="mt-4 text-sm font-semibold text-violet-900">Calculating your score…</p>
         <p className="mt-1 text-xs text-violet-700/80">
-          {speaking !== undefined ? "Transcribing audio with Azure, then grading with AI." : "Grading your writing with AI."}
+          {speaking !== undefined
+            ? "Saving your recording, transcribing with Azure, then grading with AI."
+            : "Grading your writing with AI."}
         </p>
       </div>
     );
@@ -101,10 +108,18 @@ export function PracticeScoreResult({
       </div>
 
       {!isWriting && speaking && (
-        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
-          <span className="font-semibold text-slate-700">Transcript: </span>
-          {speaking.transcript || "(empty)"}
-        </div>
+        <>
+          {recordingUrl && (
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-700">Your recording</p>
+              <audio controls src={recordingUrl} className="mt-2 w-full" preload="metadata" />
+            </div>
+          )}
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Transcript: </span>
+            {speaking.transcript || "(empty)"}
+          </div>
+        </>
       )}
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -124,6 +139,10 @@ export function PracticeScoreResult({
           </>
         ) : null}
       </div>
+
+      {isWriting && writing && (
+        <WritingErrorsPanel responseText={responseText} errors={writing.errors} />
+      )}
 
       <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2.5">
         <p className="text-xs font-semibold text-violet-900">Overall feedback</p>

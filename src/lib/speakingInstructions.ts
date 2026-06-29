@@ -1,14 +1,16 @@
 /**
- * LanguageCert International ESOL (IESOL) speaking format.
- * Sourced from scoring.env / official "Assessing Speaking Performance" handbook.
+ * LanguageCert Academic Speaking format (~14 minutes, 4 parts, B1–C2).
+ * Conducted with an interlocutor; tests spoken English in academic and study-related situations.
  *
  * Scoring: 4 criteria × 0–3 = 12 raw marks → scaled to 0–50
- * Pass 25–37 | High Pass 38–50
  */
 
 export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
 export const SPEAKING_SCALED_MAX_SCORE = 50;
+
+export const SPEAKING_EXAM_OVERVIEW =
+  "LanguageCert Academic Speaking takes about 14 minutes and has 4 parts. An interlocutor tests how well you speak in academic and everyday study-related situations (B1–C2).";
 
 export const SPEAKING_CRITERIA = [
   "Task Fulfilment & Coherence",
@@ -24,41 +26,42 @@ export const SPEAKING_PARTS = [
   { part: "4", label: "Speaking Part 4" },
 ] as const;
 
-/** Official part titles (Table 1 — IESOL exam structure) */
+/** Official LanguageCert Academic part titles */
 export const SPEAKING_PART_TITLES: Record<string, string> = {
-  "1": "Personal Information",
-  "2": "Situational Role Plays",
-  "3": "Exchanging Information & Discussion",
-  "4": "Long Turn",
+  "1": "Questions",
+  "2": "Role Play",
+  "3": "Read Aloud",
+  "4": "Presentation",
 };
 
-/** Task focus per part (Table 2 — exam format) */
+/** Task focus per part — LanguageCert Academic */
 export const SPEAKING_PART_FOCUS: Record<string, string> = {
   "1":
-    "Communicate personal information and opinions. Spell your name, give your country of origin, and answer up to five questions on familiar topics.",
+    "Give or spell your name, say your country, then answer up to 5 questions. Use 2–3 sentences per answer (direct answer + reason or example).",
   "2":
-    "Respond appropriately in real-life situations using functional language. Two or three situations are presented — respond to and initiate interactions.",
+    "Complete 2 academic-related role plays. Respond naturally and initiate interaction — greet, explain, request, and ask follow-up questions.",
   "3":
-    "Co-operate to reach agreement or discuss a topic. At B1/B2: hold a short discussion to plan, arrange, or decide using a written prompt.",
+    "Prepare for 30 seconds, read a short academic text aloud clearly (pause at punctuation), then answer follow-up questions (opinion + reason + example).",
   "4":
-    "Present a connected spoken response on a topic. After preparation time, talk about the examiner's topic, then answer follow-up questions.",
+    "Prepare for 1 minute, give a presentation for up to 2 minutes on an academic topic (introduction → 2 points with examples → conclusion), then answer follow-up questions.",
 };
 
-/** Part 4 long-turn recording duration by CEFR level (official handbook) */
+/** Part 4 presentation recording duration by CEFR level */
 const PART4_RECORD_SECONDS: Record<CefrLevel, number> = {
-  A1: 30,
-  A2: 60,
-  B1: 90,
+  A1: 60,
+  A2: 90,
+  B1: 120,
   B2: 120,
-  C1: 120,
+  C1: 150,
   C2: 180,
 };
 
-/** Practice recording limits for Parts 1–3 (interactive tasks simulated as single response) */
-const PART_PREP_RECORD: Record<string, { prep: number; record: number }> = {
-  "1": { prep: 5, record: 45 },
-  "2": { prep: 5, record: 90 },
-  "3": { prep: 5, record: 120 },
+/** Official Academic prep/record timings per part */
+const PART_PREP_RECORD: Record<string, { prep: number; record: number | ((cefr: CefrLevel) => number) }> = {
+  "1": { prep: 5, record: 60 },
+  "2": { prep: 10, record: 120 },
+  "3": { prep: 30, record: 120 },
+  "4": { prep: 60, record: (cefr) => PART4_RECORD_SECONDS[cefr] },
 };
 
 export function normalizeCefrLevel(level?: string | null): CefrLevel {
@@ -71,11 +74,10 @@ export function normalizeCefrLevel(level?: string | null): CefrLevel {
 
 export function getSpeakingPartTiming(part: string, level?: string | null) {
   const cefr = normalizeCefrLevel(level);
-  if (part === "4") {
-    return { prepSeconds: 30, recordSeconds: PART4_RECORD_SECONDS[cefr], level: cefr };
-  }
   const base = PART_PREP_RECORD[part] ?? PART_PREP_RECORD["1"];
-  return { prepSeconds: base.prep, recordSeconds: base.record, level: cefr };
+  const recordSeconds =
+    typeof base.record === "function" ? base.record(cefr) : base.record;
+  return { prepSeconds: base.prep, recordSeconds, level: cefr };
 }
 
 function formatDuration(seconds: number): string {
@@ -87,17 +89,11 @@ function formatDuration(seconds: number): string {
 }
 
 export function getSpeakingInstruction(part: string, level?: string | null): string {
-  const { prepSeconds, recordSeconds, level: cefr } = getSpeakingPartTiming(part, level);
+  const { prepSeconds, recordSeconds } = getSpeakingPartTiming(part, level);
   const focus = SPEAKING_PART_FOCUS[part] ?? SPEAKING_PART_FOCUS["1"];
-
-  if (part === "4") {
-    return `${focus} Listen to the examiner, prepare for ${prepSeconds} seconds, then record your long turn (up to ${formatDuration(recordSeconds)} at ${cefr} level).`;
-  }
-
-  return `${focus} Listen to the examiner, prepare for ${prepSeconds} seconds, then record your response (up to ${formatDuration(recordSeconds)}).`;
+  return `${focus} Listen to the examiner, prepare for ${formatDuration(prepSeconds)}, then record (up to ${formatDuration(recordSeconds)}).`;
 }
 
-/** Static fallback when question level is unknown */
 export const SPEAKING_INSTRUCTIONS: Record<string, string> = {
   "1": getSpeakingInstruction("1"),
   "2": getSpeakingInstruction("2"),
@@ -109,4 +105,4 @@ export const SPEAKING_INSTRUCTIONS: Record<string, string> = {
 export const SPEAKING_PREP_SECONDS = 5;
 
 /** @deprecated Use getSpeakingPartTiming(part, level) */
-export const SPEAKING_RECORD_SECONDS = 45;
+export const SPEAKING_RECORD_SECONDS = 60;

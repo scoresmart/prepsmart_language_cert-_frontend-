@@ -59,12 +59,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const profileUserIdRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, next) => {
+    } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
-      setUser(next?.user ?? null);
+      const nextUser = next?.user ?? null;
+
+      // Token refresh should not remount the app or reload profile.
+      setUser((prev) => {
+        if (event === "TOKEN_REFRESHED" && prev?.id === nextUser?.id) return prev;
+        return nextUser;
+      });
       setLoading(false);
     });
 
@@ -87,12 +95,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
+      profileUserIdRef.current = null;
       setProfile(null);
       return;
     }
+    if (profileUserIdRef.current === user.id) return;
+    profileUserIdRef.current = user.id;
     void loadProfile(user);
-  }, [user, loadProfile]);
+  }, [user?.id, loadProfile]);
 
   const signOut = React.useCallback(async () => {
     await supabase.auth.signOut();

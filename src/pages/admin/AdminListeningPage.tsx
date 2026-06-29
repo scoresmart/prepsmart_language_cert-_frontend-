@@ -75,6 +75,7 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
       const res = await api.listening.list({ part_number: partNumber, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
+    staleTime: 5 * 60_000,
   });
 
   const rows = q.data ?? [];
@@ -186,7 +187,7 @@ function PartPanel({ partNumber }: { partNumber: PartNumber }) {
         </Button>
       </div>
 
-      {q.isLoading ? (
+      {q.isLoading && !q.data ? (
         <div className="py-10 text-center text-sm text-slate-400">Loading…</div>
       ) : q.isError ? (
         <div className="py-10 text-center text-sm text-red-500">Failed to load questions.</div>
@@ -352,6 +353,7 @@ function PartStatCard({
       const res = await api.listening.list({ part_number: partNumber, page: 1, limit: 500 });
       return res.data?.questions ?? [];
     },
+    staleTime: 5 * 60_000,
   });
 
   const count = q.data?.length ?? 0;

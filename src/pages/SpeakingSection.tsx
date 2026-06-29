@@ -10,7 +10,9 @@ import { api } from "@/lib/api";
 
 import { PRACTICE_TIPS } from "@/lib/practiceTips";
 
-import { saveLocalRecording } from "@/lib/practiceAttemptStorage";
+import { saveLocalRecording, getLocalRecording } from "@/lib/practiceAttemptStorage";
+import { normalizeCefrLevel } from "@/lib/normalizeCefrLevel";
+import { convertBlobToWav16kMono } from "@/lib/convertRecordingToWav";
 import { notifyMockTestScoreFromAttempt, notifyMockSpeakingAiScore } from "@/lib/mockTestRecorder";
 import {
   isMicrophoneStreamActive,
@@ -38,6 +40,7 @@ import { SpeakingQuestionPanel } from "@/components/practice/speaking/SpeakingQu
 import { SpeakingSidebar } from "@/components/practice/speaking/SpeakingSidebar";
 
 import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
 
 import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
 
@@ -129,6 +132,8 @@ function SpeakingRunner({
 
     },
 
+    staleTime: 5 * 60_000,
+
   });
 
 
@@ -156,7 +161,7 @@ function SpeakingRunner({
 
   const [micError, setMicError] = React.useState<string | null>(null);
 
-  const [submitting, setSubmitting] = React.useState(false);
+  const { isSubmitting, runSubmit } = useSubmitLock();
 
   const [submitted, setSubmitted] = React.useState(false);
 
@@ -164,7 +169,12 @@ function SpeakingRunner({
 
   const [speakingScore, setSpeakingScore] = React.useState<SpeakingScoreResult | null>(null);
 
+  const [recordingUrl, setRecordingUrl] = React.useState<string | null>(null);
+
   const [scoringError, setScoringError] = React.useState<string | null>(null);
+
+  const scoringInFlightRef = React.useRef(false);
+  const stopRecordingRef = React.useRef<(() => void) | null>(null);
 
   const speakingPractice = useSpeakingPracticeStateOptional();
 
@@ -270,6 +280,10 @@ function SpeakingRunner({
 
     setScoringError(null);
 
+    setRecordingUrl(null);
+
+    scoringInFlightRef.current = false;
+
     stopMic();
 
     setMicError(null);
@@ -337,11 +351,8 @@ function SpeakingRunner({
     if (phase !== "recording") return;
 
     if (recordLeft <= 0) {
-
-      setPhase("recorded");
-
+      stopRecordingRef.current?.();
       return;
-
     }
 
     const t = window.setTimeout(() => setRecordLeft((s) => s - 1), 1000);
@@ -352,92 +363,82 @@ function SpeakingRunner({
 
 
 
-  const handleRecordingComplete = React.useCallback((blob: Blob) => {
+  const submitRecordingForScoring = React.useCallback(
+    async (blob: Blob) => {
+      if (!question || scoringInFlightRef.current) return;
 
-    setRecordingBlob(blob.size > 0 ? blob : null);
-
-    setPhase("recorded");
-
-  }, []);
-
-
-
-  const handleSubmit = async () => {
-
-    if (!question || submitting) return;
-
-    setSubmitting(true);
-
-    setSubmitted(true);
-
-    setScoringPhase("scoring");
-
-    setSpeakingScore(null);
-
-    setScoringError(null);
-
-    if (recordingBlob) {
-
-      await saveLocalRecording(question.id, recordingBlob);
-
-    }
-
-    const attemptId = await persistAttempt(
-
-      {
-
-        question_type: `speaking_part_${part}`,
-
-        question_set_id: question.id,
-
-        score: 0,
-
-        total: 50,
-
-      },
-
-      onAttemptSaved,
-
-    );
-
-    try {
-
-      if (!recordingBlob || recordingBlob.size === 0) {
-
-        throw new Error("No recording found. Please record your answer before submitting.");
-
+      if (blob.size === 0) {
+        setMicError("Recording was empty. Please try again.");
+        setPhase("waiting");
+        setSubmitted(false);
+        return;
       }
 
-      const formData = new FormData();
+      scoringInFlightRef.current = true;
+      setSubmitted(true);
+      setScoringPhase("scoring");
+      setSpeakingScore(null);
+      setScoringError(null);
 
-      formData.append("audio", recordingBlob, "recording.webm");
+      await saveLocalRecording(question.id, blob);
+      const playback = await getLocalRecording(question.id);
+      setRecordingUrl(playback);
 
-      formData.append("level", question.level);
+      let uploadBlob: Blob;
+      try {
+        uploadBlob = await convertBlobToWav16kMono(blob);
+      } catch (convertError) {
+        const msg =
+          convertError instanceof Error ? convertError.message : "Could not process your recording.";
+        throw new Error(msg);
+      }
 
-      formData.append("task_description", `${question.title}\n\n${question.content}`);
+      const attemptId = await persistAttempt(
+        {
+          question_type: `speaking_part_${part}`,
+          question_set_id: question.id,
+          score: 0,
+          total: 50,
+        },
+        onAttemptSaved,
+      );
 
-      if (attemptId) formData.append("attempt_id", attemptId);
+      try {
+        const cefrLevel = normalizeCefrLevel(question.level);
+        const formData = new FormData();
+        formData.append("audio", uploadBlob, "recording.wav");
+        formData.append("level", cefrLevel);
+        formData.append("task_description", `${question.title}\n\n${question.content}`);
+        if (attemptId) formData.append("attempt_id", attemptId);
 
-      const res = await api.scoring.speakingAudio(formData);
+        const res = await api.scoring.speakingAudio(formData);
+        setSpeakingScore(res.data);
+        notifyMockSpeakingAiScore(part, res.data.scores.scaledTotal);
+        setScoringPhase("done");
+      } catch (error) {
+        setScoringError(error instanceof Error ? error.message : "Scoring failed");
+        setScoringPhase("error");
+        scoringInFlightRef.current = false;
+      }
+    },
+    [question, part, onAttemptSaved],
+  );
 
-      setSpeakingScore(res.data);
+  const handleRecordingComplete = React.useCallback(
+    (blob: Blob) => {
+      const validBlob = blob.size > 0 ? blob : null;
+      setRecordingBlob(validBlob);
+      setPhase("recorded");
+      if (validBlob) {
+        void runSubmit(() => submitRecordingForScoring(validBlob));
+      }
+    },
+    [runSubmit, submitRecordingForScoring],
+  );
 
-      notifyMockSpeakingAiScore(part, res.data.scores.scaledTotal);
-
-      setScoringPhase("done");
-
-    } catch (error) {
-
-      setScoringError(error instanceof Error ? error.message : "Scoring failed");
-
-      setScoringPhase("error");
-
-    } finally {
-
-      setSubmitting(false);
-
-    }
-
+  const handleSubmit = () => {
+    if (!question || submitted || isSubmitting || !recordingBlob) return;
+    void runSubmit(() => submitRecordingForScoring(recordingBlob));
   };
 
 
@@ -478,15 +479,20 @@ function SpeakingRunner({
 
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        onClick={handleSubmit}
-        disabled={phase !== "recorded" || submitting || submitted}
-        className="gap-2 bg-violet-600 hover:bg-violet-700"
-      >
-        <Send className="size-4" />
-        {submitting ? "Submitting…" : submitted ? (scoringPhase === "scoring" ? "Scoring…" : "Submitted") : "Submit"}
-      </Button>
+      {phase === "recorded" && !submitted && recordingBlob && (
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+          className="gap-2 bg-violet-600 hover:bg-violet-700"
+        >
+          <Send className="size-4" />
+          {isSubmitting ? "Submitting…" : "Submit for scoring"}
+        </Button>
+      )}
+      {submitted && scoringPhase === "scoring" && (
+        <span className="text-sm font-medium text-violet-700">Saving recording and calculating score…</span>
+      )}
       <Button type="button" variant="outline" onClick={() => { onRetry(); }} className="gap-2">
         <RotateCcw className="size-4" />
         Re-do
@@ -556,6 +562,18 @@ function SpeakingRunner({
 
         }}
 
+        onExaminerPlaying={(playing) => {
+
+          if (playing) void ensureMicAccess();
+
+        }}
+
+        onRegisterRecordingStop={(stop) => {
+
+          stopRecordingRef.current = stop;
+
+        }}
+
       />
 
 
@@ -571,6 +589,8 @@ function SpeakingRunner({
             error={scoringError}
 
             speaking={speakingScore}
+
+            recordingUrl={recordingUrl}
 
           />
 

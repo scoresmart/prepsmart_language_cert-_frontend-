@@ -4,7 +4,11 @@ import { ArrowLeft, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { MockTestFormatOverview } from "@/components/mock-test/MockTestFormatOverview";
-import { MOCK_TEST_STEPS } from "@/lib/mockTestFormat";
+import {
+  MOCK_ACTIVITY_SCREENS,
+  MOCK_EXAM_TITLE,
+  MOCK_EXAM_TOTAL_MINUTES,
+} from "@/lib/mockTestFormat";
 import { initMockSession } from "@/lib/mockTestSessionStorage";
 import { mockTestCatalogUrl, mockTestStepUrl } from "@/lib/mockTestRoutes";
 
@@ -57,14 +61,24 @@ export function MockTestIntroPage() {
       </Link>
 
       <header className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-6 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-widest text-violet-600">Full mock test</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-violet-600">{MOCK_EXAM_TITLE} mock test</p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">{test.title}</h1>
         {test.description && <p className="mt-2 text-sm text-slate-600">{test.description}</p>}
 
         <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Sections</dt>
-            <dd className="font-semibold text-slate-800">{MOCK_TEST_STEPS.length} parts</dd>
+            <dt className="text-slate-500">Activity screens</dt>
+            <dd className="font-semibold text-slate-800">{MOCK_ACTIVITY_SCREENS} sections</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Total time</dt>
+            <dd className="font-semibold text-slate-800">
+              ~{Math.floor(MOCK_EXAM_TOTAL_MINUTES / 60)}h {MOCK_EXAM_TOTAL_MINUTES % 60}m
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Modules</dt>
+            <dd className="font-semibold text-slate-800">Listening · Reading · Writing · Speaking</dd>
           </div>
           <div>
             <dt className="text-slate-500">Order</dt>

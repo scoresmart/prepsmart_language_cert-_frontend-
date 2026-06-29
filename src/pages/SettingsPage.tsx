@@ -42,11 +42,12 @@ export function SettingsPage() {
     mutationFn: async (values: Form) => {
       if (!user) return;
       const { error } = await supabase
-        .from("user_profiles")
+        .from("profiles")
         .update({
-          full_name: values.full_name,
-          exam_date: values.exam_date || null,
-          target_level: values.target_level || null,
+          name: values.full_name,
+          exam_deadline: values.exam_date || null,
+          target_score: values.target_level || null,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);
       if (error) throw error;
@@ -68,7 +69,7 @@ export function SettingsPage() {
       <Card className="max-w-lg shadow-soft">
         <CardHeader>
           <CardTitle className="text-base">Profile</CardTitle>
-          <CardDescription>Updates sync to <code className="text-xs">lc.user_profiles</code>.</CardDescription>
+          <CardDescription>Updates sync to your profile.</CardDescription>
         </CardHeader>
         <CardContent>
           <form

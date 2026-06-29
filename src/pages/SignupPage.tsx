@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -34,33 +34,41 @@ export function SignupPage() {
 
   if (!loading && user) return <Navigate to="/dashboard" replace />;
 
+  const signingUpRef = useRef(false);
+
   const onSubmit = form.handleSubmit(async (values) => {
-    if (!agreed) {
-      toast.error("Please agree to the Terms & Conditions and Privacy Policy");
-      return;
+    if (signingUpRef.current) return;
+    signingUpRef.current = true;
+    try {
+      if (!agreed) {
+        toast.error("Please agree to the Terms & Conditions and Privacy Policy");
+        return;
+      }
+      const origin = window.location.origin;
+      const { data, error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          data: { full_name: values.fullName },
+          emailRedirectTo: `${origin}/dashboard`,
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      if (data.session) {
+        toast.success("Welcome to PrepSmart LC!");
+        navigate("/dashboard", { replace: true });
+        return;
+      }
+      toast.error(
+        "Sign-up did not return a session. In Supabase: Authentication > Providers > Email > disable Confirm email, then try again.",
+        { duration: 10_000 },
+      );
+    } finally {
+      signingUpRef.current = false;
     }
-    const origin = window.location.origin;
-    const { data, error } = await supabase.auth.signUp({
-      email: values.email,
-      password: values.password,
-      options: {
-        data: { full_name: values.fullName },
-        emailRedirectTo: `${origin}/dashboard`,
-      },
-    });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    if (data.session) {
-      toast.success("Welcome to PrepSmart LC!");
-      navigate("/dashboard", { replace: true });
-      return;
-    }
-    toast.error(
-      "Sign-up did not return a session. In Supabase: Authentication > Providers > Email > disable Confirm email, then try again.",
-      { duration: 10_000 },
-    );
   });
 
   return (

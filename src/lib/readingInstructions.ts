@@ -7,17 +7,17 @@ export const READING_PARTS = [
 ] as const;
 
 export const READING_INSTRUCTIONS: Record<string, string> = {
-  "1a": "Read the sentences below and decide which option (A, B, C or D) can best replace the word in bold so that the meaning of the sentence remains the same.",
-  "1b": "Read the text below and decide which option (A, B or C) best fits each gap.",
-  "2": "Read the article from an international news magazine. Drag and drop the correct sentence (A–H) to complete the six gaps in the text. There are two extra sentences you will not need.",
-  "3": "Read the four texts below. There are several questions about the texts. Which text gives you the answer to each question? Select the correct text (A, B, C or D) for each statement.",
-  "4": "Read the article and answer the questions.",
+  "1a": "Read each sentence and choose the word (A, B, C, or D) that can best replace the highlighted word without changing the meaning.",
+  "1b": "Read the short text with missing words. Choose the correct word (A, B, or C) for each gap.",
+  "2": "Read the text with six removed sentences. Match each gap with the correct sentence (A–H). Two sentences are not used.",
+  "3": "Read four short texts on the same topic. For each statement, select which text (A, B, C, or D) gives the answer.",
+  "4": "Read the longer academic text and choose the best answer (A, B, C, or D) for each question.",
 };
 
 export const READING_PART_TITLES: Record<string, string> = {
-  "1a": "Synonym Selection",
+  "1a": "Word Replacement",
   "1b": "Gap Fill",
-  "2": "Sentence Insertion",
-  "3": "Passage Matching",
-  "4": "Reading Comprehension",
+  "2": "Missing Sentences",
+  "3": "Four Short Texts",
+  "4": "Long Academic Text",
 };

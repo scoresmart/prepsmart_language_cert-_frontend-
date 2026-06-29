@@ -3,6 +3,12 @@ export type PracticeGrade = "High Pass" | "Pass" | "Below Pass";
 
 export const DEFAULT_WRITING_LEVEL: CEFRLevel = "B2";
 
+export interface WritingError {
+  word: string;
+  type: "spelling" | "grammar" | "article" | string;
+  correction: string;
+}
+
 export interface WritingScoreResult {
   type: "writing";
   level: CEFRLevel;
@@ -22,6 +28,7 @@ export interface WritingScoreResult {
     organisation: string;
     overall: string;
   };
+  errors?: WritingError[];
   grade: PracticeGrade;
 }
 
@@ -47,6 +54,7 @@ export interface SpeakingScoreResult {
     overall: string;
   };
   grade: PracticeGrade;
+  recordingUrl?: string;
 }
 
 export type ScoringPhase = "idle" | "scoring" | "done" | "error";

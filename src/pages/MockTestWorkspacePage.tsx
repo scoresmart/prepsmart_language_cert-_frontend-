@@ -11,7 +11,7 @@ import {
   SpeakingSidebarPanel,
 } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { api } from "@/lib/api";
-import { MOCK_TEST_STEPS } from "@/lib/mockTestFormat";
+import { MOCK_TEST_STEPS, READING_STEP_TO_PART_TYPE } from "@/lib/mockTestFormat";
 import { setMockTestContext } from "@/lib/mockTestRecorder";
 import {
   mockTestCatalogUrl,
@@ -23,7 +23,8 @@ import { initMockSession } from "@/lib/mockTestSessionStorage";
 import type { MockTestStructure } from "@/lib/mockTestTypes";
 import {
   toListeningQuestion,
-  toReadingQuestion,
+  toReadingQuestionFromSection,
+  readingQuestionToWritingShape,
   toWritingQuestion,
 } from "@/lib/mockTestTypes";
 import {
@@ -39,8 +40,10 @@ function resolveListeningQuestion(structure: MockTestStructure, step: (typeof MO
 }
 
 function resolveReadingQuestion(structure: MockTestStructure, step: (typeof MOCK_TEST_STEPS)[number]) {
-  const section = structure.sections.reading.find((s) => s.part_type === step.part);
-  return section ? toReadingQuestion(section) : null;
+  const partType = READING_STEP_TO_PART_TYPE[step.part] ?? `part${step.part}`;
+  const section = structure.sections.reading.find((s) => s.part_type === partType);
+  const rq = section ? toReadingQuestionFromSection(section) : null;
+  return rq ? readingQuestionToWritingShape(rq) : null;
 }
 
 function resolveWritingQuestion(structure: MockTestStructure, step: (typeof MOCK_TEST_STEPS)[number]) {

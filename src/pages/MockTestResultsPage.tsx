@@ -3,10 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
+  MOCK_ACTIVITY_SCREENS,
+  MOCK_EXAM_TITLE,
   MOCK_LISTENING_PARTS,
   MOCK_READING_PARTS,
   MOCK_SPEAKING_PARTS,
-  MOCK_TEST_STEPS,
   MOCK_WRITING_TASKS,
 } from "@/lib/mockTestFormat";
 import { mockTestCatalogUrl, mockTestStepUrl } from "@/lib/mockTestRoutes";
@@ -193,7 +194,7 @@ export function MockTestResultsPage() {
       )}
 
       <p className="text-xs text-slate-400">
-        {MOCK_TEST_STEPS.length} sections · LanguageCert International ESOL format
+        {MOCK_ACTIVITY_SCREENS} sections · {MOCK_EXAM_TITLE} format
       </p>
     </div>
   );

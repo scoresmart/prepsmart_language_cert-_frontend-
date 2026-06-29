@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -33,26 +33,34 @@ export function LoginPage() {
     return <Navigate to={isAdmin ? "/admin/dashboard" : from} replace />;
   }
 
+  const signingInRef = useRef(false);
+
   const onSubmit = form.handleSubmit(async (values) => {
-    if (!supabaseConfigured) {
-      toast.error("Login is unavailable: Supabase env vars are missing on this deployment.");
-      return;
+    if (signingInRef.current) return;
+    signingInRef.current = true;
+    try {
+      if (!supabaseConfigured) {
+        toast.error("Login is unavailable: Supabase env vars are missing on this deployment.");
+        return;
+      }
+      if (!agreed) {
+        toast.error("Please agree to the Terms & Conditions and Privacy Policy");
+        return;
+      }
+      const { error, data } = await supabase.auth.signInWithPassword({
+        email: values.email.trim().toLowerCase(),
+        password: values.password.trim(),
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success("Signed in successfully!");
+      const isAdmin = isAdminEmail(data.user?.email);
+      navigate(isAdmin ? "/admin/dashboard" : from, { replace: true });
+    } finally {
+      signingInRef.current = false;
     }
-    if (!agreed) {
-      toast.error("Please agree to the Terms & Conditions and Privacy Policy");
-      return;
-    }
-    const { error, data } = await supabase.auth.signInWithPassword({
-      email: values.email.trim().toLowerCase(),
-      password: values.password.trim(),
-    });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Signed in successfully!");
-    const isAdmin = isAdminEmail(data.user?.email);
-    navigate(isAdmin ? "/admin/dashboard" : from, { replace: true });
   });
 
   const handleGoogleSignIn = async () => {

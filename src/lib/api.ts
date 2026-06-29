@@ -719,6 +719,14 @@ export const api = {
       }),
     delete: (id: string) =>
       request<ApiResponse<{ message: string }>>(`/questions/speaking/${id}`, { method: "DELETE" }),
+    uploadAudio: (file: File) => {
+      const formData = new FormData();
+      formData.append("audio", file);
+      return requestForm<ApiResponse<{ path: string; publicUrl: string }>>(
+        "/questions/speaking/upload-audio",
+        formData,
+      );
+    },
   },
 
   // ─── Reading Questions ────────────────────────────────────────────────────

@@ -212,6 +212,7 @@ export function AdminWritingPage() {
       const res = await api.writing.list(); // GET /questions/writing — no filter = all
       return res.data ?? [];
     },
+    staleTime: 5 * 60_000,
   });
 
   const task1Questions = React.useMemo(
@@ -392,7 +393,7 @@ export function AdminWritingPage() {
               </div>
 
               {/* Table */}
-              {isLoading ? (
+              {isLoading && allQuestions.length === 0 ? (
                 <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
               ) : (
                 <QuestionTable

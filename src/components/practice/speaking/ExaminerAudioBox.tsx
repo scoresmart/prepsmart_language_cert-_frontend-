@@ -36,6 +36,11 @@ export function ExaminerAudioBox({
     if (!src || !autoPlay) return;
     const el = audioRef.current;
     if (!el) return;
+
+    // Don't restart if user switched browser tabs and audio was already playing/finished.
+    if (!el.paused && el.currentTime > 0) return;
+    if (el.ended) return;
+
     const play = () => void el.play().catch(() => setPlayState(false));
     if (el.readyState >= 2) play();
     else el.addEventListener("canplay", play, { once: true });

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, FlaskConical, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { mockTestIntroUrl } from "@/lib/mockTestRoutes";
+import { MOCK_EXAM_TITLE, MOCK_ACTIVITY_SCREENS, MOCK_EXAM_TOTAL_MINUTES } from "@/lib/mockTestFormat";
 
 export function MockTestCatalogPage() {
   const q = useQuery({
@@ -23,6 +24,10 @@ export function MockTestCatalogPage() {
           <span className="text-xs font-semibold uppercase tracking-widest">PrepSmart LC</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Mock Tests</h1>
+        <p className="text-sm text-slate-500">
+          {MOCK_EXAM_TITLE} — {MOCK_ACTIVITY_SCREENS} sections, ~{Math.floor(MOCK_EXAM_TOTAL_MINUTES / 60)}h{" "}
+          {MOCK_EXAM_TOTAL_MINUTES % 60}m · Listening, Reading, Writing, Speaking (4 parts)
+        </p>
       </header>
 
       {q.isLoading ? (

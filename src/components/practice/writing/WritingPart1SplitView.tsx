@@ -183,12 +183,14 @@ export function WritingPart1Footer({
   minWords,
   maxWords,
   canSubmit,
+  submitting,
   onSubmit,
 }: {
   wordCount: number;
   minWords: number;
   maxWords: number;
   canSubmit: boolean;
+  submitting?: boolean;
   onSubmit: () => void;
 }) {
   return (
@@ -196,13 +198,13 @@ export function WritingPart1Footer({
       <WritingWordCountBar count={wordCount} min={minWords} max={maxWords} />
       <Button
         onClick={onSubmit}
-        disabled={!canSubmit}
+        disabled={!canSubmit || submitting}
         className={cn(
           "shrink-0 gap-2 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600",
           "w-full sm:w-auto sm:min-w-[160px]",
         )}
       >
-        Submit answer
+        {submitting ? "Submitting…" : "Submit answer"}
       </Button>
     </div>
   );

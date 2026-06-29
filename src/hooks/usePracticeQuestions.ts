@@ -6,6 +6,7 @@ export function usePracticeQuestions(section: string, part: string) {
     queryKey: ["practice-questions", section, part],
     queryFn: () => fetchPracticeQuestions(section, part),
     enabled: !!section && !!part,
+    staleTime: 5 * 60_000,
   });
 
   return {

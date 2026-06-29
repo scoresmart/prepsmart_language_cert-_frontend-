@@ -1,31 +1,117 @@
-/** LanguageCert International ESOL mock test format (B1/B2-style). */
+/** LanguageCert Academic / Academic SELT — official mock test format. */
+
+export const MOCK_EXAM_TITLE = "LanguageCert Academic";
+export const MOCK_EXAM_TOTAL_MINUTES = 154; // ~2h 34m
+export const MOCK_ACTIVITY_SCREENS = 15;
+
+export const MOCK_MODULE_TIMINGS = {
+  listening: 40,
+  reading: 50,
+  writing: 50,
+  speaking: 14,
+} as const;
 
 export const MOCK_LISTENING_PARTS = [
-  { part: "1", label: "Part 1", questions: 7, format: "7 MCQs — unfinished conversations" },
-  { part: "2", label: "Part 2", questions: 6, format: "6 MCQs — 3 conversations, 2 questions each" },
-  { part: "3", label: "Part 3", questions: 7, format: "7 note-completion (1–5 words)" },
-  { part: "4", label: "Part 4", questions: 6, format: "6 MCQs — discussion/debate" },
+  {
+    part: "1",
+    label: "Part 1",
+    title: "Short Dialogues",
+    questions: 7,
+    format: "7 MCQs — unfinished dialogues, choose the best ending (3 options). Played twice.",
+  },
+  {
+    part: "2",
+    label: "Part 2",
+    title: "Conversations",
+    questions: 10,
+    format: "10 MCQs — 5 conversations, 2 questions each. Played twice.",
+  },
+  {
+    part: "3",
+    label: "Part 3",
+    title: "Lecture / Podcast Gap Fill",
+    questions: 7,
+    format: "7 gap-fill — academic lecture or podcast (max 3 words per answer). Played twice.",
+  },
+  {
+    part: "4",
+    label: "Part 4",
+    title: "Group Discussion / Debate",
+    questions: 6,
+    format: "6 MCQs — group discussion or debate. Played twice.",
+  },
 ] as const;
 
 export const MOCK_READING_PARTS = [
-  { part: "1a", label: "Part 1A", questions: 6, format: "6 MCQs — long text" },
-  { part: "1b", label: "Part 1B", questions: 6, format: "6 gap-fill sentences" },
-  { part: "2", label: "Part 2", questions: 6, format: "6 matching questions" },
-  { part: "3", label: "Part 3", questions: 7, format: "7 matching — 4 short texts" },
-  { part: "4", label: "Part 4", questions: 7, format: "7 short answers (up to 5 words)" },
+  {
+    part: "1a",
+    label: "Part 1a",
+    title: "Word Replacement",
+    questions: 6,
+    format: "6 MCQs — replace the highlighted word while keeping the same meaning.",
+  },
+  {
+    part: "1b",
+    label: "Part 1b",
+    title: "Gap Fill",
+    questions: 5,
+    format: "5 gap-fill MCQs — choose the correct word from 3 options.",
+  },
+  {
+    part: "2",
+    label: "Part 2",
+    title: "Missing Sentences",
+    questions: 6,
+    format: "6 matching — insert removed sentences from 8 options.",
+  },
+  {
+    part: "3",
+    label: "Part 3",
+    title: "Four Short Texts",
+    questions: 7,
+    format: "7 matching — identify which text (A–D) answers each statement.",
+  },
+  {
+    part: "4",
+    label: "Part 4",
+    title: "Long Academic Text",
+    questions: 6,
+    format: "6 MCQs — longer academic passage, 4 options each.",
+  },
 ] as const;
 
 export const MOCK_WRITING_TASKS = [
-  { part: "1", label: "Task 1", words: "100–150", format: "Formal — letter, email, report" },
-  { part: "2", label: "Task 2", words: "150–200", format: "Informal/personal writing" },
+  {
+    part: "1",
+    label: "Task 1",
+    title: "Academic Report / Article",
+    words: "150–200",
+    format: "Write a report or article based on a chart, table, or visual (150–200 words).",
+  },
+  {
+    part: "2",
+    label: "Task 2",
+    title: "Discursive Essay",
+    words: "~250",
+    format: "Academic essay — argue, persuade, explain opinion, or discuss (~250 words).",
+  },
 ] as const;
 
 export const MOCK_SPEAKING_PARTS = [
-  { part: "1", label: "Part 1", format: "Name, country, 5 personal questions" },
-  { part: "2", label: "Part 2", format: "Role-play situations" },
-  { part: "3", label: "Part 3", format: "Plan/arrange discussion" },
-  { part: "4", label: "Part 4", format: "30s prep, ~2 min talk + follow-ups" },
+  { part: "1", label: "Part 1", title: "Questions", format: "Name, spell name, country of origin, up to 5 general questions." },
+  { part: "2", label: "Part 2", title: "Role Play", format: "2 role-play situations in academic-related scenarios." },
+  { part: "3", label: "Part 3", title: "Read Aloud", format: "30s prep, read a short academic text aloud, then follow-up questions." },
+  { part: "4", label: "Part 4", title: "Presentation", format: "1 min prep, speak up to 2 min on an academic topic, then follow-ups." },
 ] as const;
+
+/** Map mock runner step part keys → DB `part_type` for reading. */
+export const READING_STEP_TO_PART_TYPE: Record<string, string> = {
+  "1a": "part1a",
+  "1b": "part1b",
+  "2": "part2",
+  "3": "part3",
+  "4": "part4",
+};
 
 export type MockTestStep = {
   key: string;
@@ -67,8 +153,11 @@ export const MOCK_TEST_STEPS: MockTestStep[] = [
 ];
 
 export const MOCK_TOTALS = {
-  listening: 26,
-  reading: 26,
+  listening: MOCK_LISTENING_PARTS.reduce((s, p) => s + p.questions, 0),
+  reading: MOCK_READING_PARTS.reduce((s, p) => s + p.questions, 0),
   writing: 50,
   speaking: 50,
 };
+
+/** DB-backed sections assembled in admin (speaking uses practice bank in runner). */
+export const MOCK_DB_SECTION_COUNT = 11;

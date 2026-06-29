@@ -6,17 +6,17 @@ export const LISTENING_PARTS = [
 ] as const;
 
 export const LISTENING_INSTRUCTIONS: Record<number, string> = {
-  1: "You will hear some short conversations. You will hear each conversation twice. Choose the correct answer to complete each conversation.",
-  2: "You will hear longer conversations. Listen carefully and choose the best answer for each question.",
-  3: "You will hear a recording. Complete the notes by filling in the blanks as you listen.",
-  4: "You will hear an extended discussion. Choose the correct answer for each question.",
+  1: "You will hear 7 short unfinished dialogues. You will hear each dialogue twice. Choose the best ending (A, B, or C) to complete each dialogue.",
+  2: "You will hear 5 conversations. Each conversation has 2 multiple-choice questions. You will hear each conversation twice.",
+  3: "You will hear an academic lecture or podcast. Fill in the blanks as you listen. Each answer should be no more than 3 words. You will hear the recording twice.",
+  4: "You will hear a group discussion or debate. Choose the correct answer (A, B, C, or D) for each question. You will hear the recording twice.",
 };
 
 export const LISTENING_PART_TITLES: Record<number, string> = {
-  1: "Short Exchanges",
+  1: "Short Dialogues",
   2: "Conversations",
-  3: "Note Completion",
-  4: "Extended Discussion",
+  3: "Lecture / Podcast Gap Fill",
+  4: "Group Discussion / Debate",
 };
 
 /** Seconds to prepare before listening audio auto-plays. */

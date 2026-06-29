@@ -18,14 +18,19 @@ export function pickSpeakingTestAudio(seed = 0): string {
 }
 
 /** Resolve examiner audio — uses test sample when question has no audio_url. */
+export function getSpeakingAudioPublicUrl(audioRef?: string | null): string | null {
+  if (!audioRef?.trim()) return null;
+  const trimmed = audioRef.trim();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (trimmed.startsWith("listening/") || trimmed.startsWith("legacy-listening/")) {
+    return `${SUPABASE_URL}/storage/v1/object/public/listening-audio/${trimmed.replace(/^legacy-listening\//, "")}`;
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/speaking-audio/${trimmed}`;
+}
+
 export function getSpeakingExaminerAudioUrl(
   audioUrl?: string | null,
   seed = 0,
 ): string {
-  if (audioUrl?.trim()) {
-    const trimmed = audioUrl.trim();
-    if (trimmed.startsWith("http")) return trimmed;
-    return `${SUPABASE_URL}/storage/v1/object/public/listening-audio/${trimmed}`;
-  }
-  return pickSpeakingTestAudio(seed);
+  return getSpeakingAudioPublicUrl(audioUrl) ?? pickSpeakingTestAudio(seed);
 }

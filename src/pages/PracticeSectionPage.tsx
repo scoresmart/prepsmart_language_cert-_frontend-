@@ -28,6 +28,7 @@ import { WritingRichEditor } from "@/components/practice/writing/WritingRichEdit
 import { WRITING_WORD_LIMITS } from "@/lib/writingInstructions";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
 import { notifyMockTestScoreFromAttempt, notifyMockWritingAiScore } from "@/lib/mockTestRecorder";
+import { useSubmitAnswers, useSubmitLock } from "@/hooks/useSubmitLock";
 import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
 import { DEFAULT_WRITING_LEVEL, type ScoringPhase, type WritingScoreResult } from "@/lib/scoringTypes";
 
@@ -155,6 +156,7 @@ export function WritingRunner({
   const [scoringPhase, setScoringPhase] = React.useState<ScoringPhase>("idle");
   const [writingScore, setWritingScore] = React.useState<WritingScoreResult | null>(null);
   const [scoringError, setScoringError] = React.useState<string | null>(null);
+  const { isSubmitting, runSubmit } = useSubmitLock();
 
   const q = useQuery({
     queryKey: ["practice", "writing", taskType],
@@ -176,39 +178,41 @@ export function WritingRunner({
     setScoringError(null);
   }, [questionIndex, attemptKey, question?.id]);
 
-  const handleSubmit = async () => {
-    if (!question) return;
-    setSubmitted(true);
-    setScoringPhase("scoring");
-    setWritingScore(null);
-    setScoringError(null);
-    saveLocalAnswer(question.id, text);
+  const handleSubmit = () => {
+    if (!question || submitted) return;
+    void runSubmit(async () => {
+      setSubmitted(true);
+      setScoringPhase("scoring");
+      setWritingScore(null);
+      setScoringError(null);
+      saveLocalAnswer(question.id, text);
 
-    const attemptId = await persistAttempt(
-      {
-        question_type: `writing_${taskType}`,
-        question_set_id: question.id,
-        score: 0,
-        total: 12,
-      },
-      onAttemptSaved,
-    );
+      const attemptId = await persistAttempt(
+        {
+          question_type: `writing_${taskType}`,
+          question_set_id: question.id,
+          score: 0,
+          total: 12,
+        },
+        onAttemptSaved,
+      );
 
-    try {
-      const res = await api.scoring.writing({
-        question_text: question.question_text,
-        candidate_response: text,
-        level: DEFAULT_WRITING_LEVEL,
-        task_type: taskType,
-        attempt_id: attemptId ?? undefined,
-      });
-      setWritingScore(res.data);
-      notifyMockWritingAiScore(taskType as "task1" | "task2", res.data.scores.total);
-      setScoringPhase("done");
-    } catch (error) {
-      setScoringError(error instanceof Error ? error.message : "Scoring failed");
-      setScoringPhase("error");
-    }
+      try {
+        const res = await api.scoring.writing({
+          question_text: question.question_text,
+          candidate_response: text,
+          level: DEFAULT_WRITING_LEVEL,
+          task_type: taskType,
+          attempt_id: attemptId ?? undefined,
+        });
+        setWritingScore(res.data);
+        notifyMockWritingAiScore(taskType as "task1" | "task2", res.data.scores.total);
+        setScoringPhase("done");
+      } catch (error) {
+        setScoringError(error instanceof Error ? error.message : "Scoring failed");
+        setScoringPhase("error");
+      }
+    });
   };
 
   const handleRetry = () => {
@@ -269,6 +273,7 @@ export function WritingRunner({
                     phase={scoringPhase}
                     error={scoringError}
                     writing={writingScore}
+                    responseText={text}
                     className="shrink-0"
                   />
                   {scoringPhase === "done" && (
@@ -287,7 +292,8 @@ export function WritingRunner({
               wordCount={wordCount}
               minWords={minWords}
               maxWords={maxWords}
-              canSubmit={canSubmit}
+              canSubmit={canSubmit && !isSubmitting}
+              submitting={isSubmitting}
               onSubmit={handleSubmit}
             />
           ) : undefined
@@ -303,10 +309,10 @@ export function WritingRunner({
         !submitted ? (
           <Button
             onClick={handleSubmit}
-            disabled={!canSubmit}
+            disabled={!canSubmit || isSubmitting}
             className="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 sm:ml-auto sm:w-auto"
           >
-            Submit Answer
+            {isSubmitting ? "Submitting…" : "Submit Answer"}
           </Button>
         ) : undefined
       }
@@ -329,7 +335,7 @@ export function WritingRunner({
 
         {submitted ? (
           <div className="space-y-4">
-            <PracticeScoreResult phase={scoringPhase} error={scoringError} writing={writingScore} />
+            <PracticeScoreResult phase={scoringPhase} error={scoringError} writing={writingScore} responseText={text} />
             {scoringPhase === "done" && (
               <div className="text-center">
                 <Button onClick={handleRetry} variant="outline" size="sm" className="gap-2">
@@ -379,15 +385,17 @@ function Reading1ARunner({
   const score = items.filter((item, i) => answers[i] === LABELS[item.correctAnswer]).length;
   const allAnswered = items.length > 0 && items.every((_, i) => answers[i]);
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "reading_part_1a",
         question_set_id: question.id,
         score,
         total: items.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   return (
     <ReadingPracticeShell
@@ -398,8 +406,8 @@ function Reading1ARunner({
       onNext={onNext}
       footer={
         !revealed && items.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full sm:ml-auto sm:w-auto">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -450,15 +458,17 @@ function Reading1BRunner({
   const allAnswered = gapOptions.length > 0 && gapOptions.every((_, i) => answers[i]);
   const gapStartNum = 1;
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "reading_part_1b",
         question_set_id: question.id,
         score,
         total: gapOptions.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -506,8 +516,8 @@ function Reading1BRunner({
       rightPanel={rightPanel}
       footer={
         !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full sm:ml-auto sm:w-auto">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -555,15 +565,17 @@ function Reading2Runner({
     setActiveGap(null);
   };
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "reading_part_2",
         question_set_id: question.id,
         score,
         total: gaps.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -647,8 +659,8 @@ function Reading2Runner({
       rightPanel={rightPanel}
       footer={
         !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full sm:ml-auto sm:w-auto">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -682,15 +694,17 @@ function Reading3Runner({
   const allAnswered = data.statements.length > 0 && data.statements.every((_, i) => answers[i]);
   const textOptions = data.passages.map((p) => p.label);
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "reading_part_3",
         question_set_id: question.id,
         score,
         total: data.statements.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   const leftPanel = (
     <div className="space-y-4">
@@ -731,8 +745,8 @@ function Reading3Runner({
       rightPanel={rightPanel}
       footer={
         !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full sm:ml-auto sm:w-auto">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -766,15 +780,17 @@ function Reading4Runner({
   const score = data.questions.filter((q, i) => answers[i] === q.correctAnswer).length;
   const allAnswered = data.questions.every((_, i) => answers[i]);
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "reading_part_4",
         question_set_id: question.id,
         score,
         total: data.questions.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -815,8 +831,8 @@ function Reading4Runner({
       rightPanel={rightPanel}
       footer={
         !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full sm:ml-auto sm:w-auto">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -931,15 +947,17 @@ function Listening1Runner({
   const score = items.filter((item, i) => answers[i] === item.correctAnswer).length;
   const allAnswered = items.length > 0 && items.every((_, i) => answers[i]);
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "listening_part_1",
         question_set_id: question.id,
         score,
         total: items.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   return (
     <ListeningPracticeShell
@@ -951,8 +969,8 @@ function Listening1Runner({
       onNext={onNext}
       footer={
         !revealed && items.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -1008,15 +1026,17 @@ function Listening2Runner({
   const score = allSubQuestions.filter(({ ci, qi, q }) => answers[`${ci}-${qi}`] === q.correctAnswer).length;
   const allAnswered = allSubQuestions.length > 0 && allSubQuestions.every(({ ci, qi }) => answers[`${ci}-${qi}`]);
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "listening_part_2",
         question_set_id: question.id,
         score,
         total: allSubQuestions.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   let questionNum = 0;
 
@@ -1030,8 +1050,8 @@ function Listening2Runner({
       onNext={onNext}
       footer={
         !revealed && allSubQuestions.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -1096,15 +1116,17 @@ function Listening3Runner({
   ).length;
   const allFilled = answers.length > 0 && answers.every((_, i) => (inputs[i] ?? "").trim());
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "listening_part_3",
         question_set_id: question.id,
         score,
         total: answers.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   // Replace [___1___] style markers with inputs
   const parts = data.questionText.split(/\[___(\d+)___\]/g);
@@ -1119,8 +1141,8 @@ function Listening3Runner({
       onNext={onNext}
       footer={
         !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allFilled} className="w-full">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allFilled || isSubmitting} className="w-full">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }
@@ -1193,15 +1215,17 @@ function Listening4Runner({
   const allAnswered = qs.length > 0 && qs.every((_, i) => answers[i] !== undefined);
   const LABELS = ["A", "B", "C", "D", "E"];
 
-  const handleSubmit = async () => {
-    setRevealed(true);
-    await persistAttempt({
+  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
+    persistAttempt(
+      {
         question_type: "listening_part_4",
         question_set_id: question.id,
         score,
         total: qs.length,
-      }, onAttemptSaved);
-  };
+      },
+      onAttemptSaved,
+    ),
+  );
 
   return (
     <ListeningPracticeShell
@@ -1213,8 +1237,8 @@ function Listening4Runner({
       onNext={onNext}
       footer={
         !revealed && qs.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered} className="w-full">
-            Submit Answers
+          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
+            {isSubmitting ? "Submitting…" : "Submit Answers"}
           </Button>
         ) : undefined
       }

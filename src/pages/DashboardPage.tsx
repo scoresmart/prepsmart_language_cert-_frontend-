@@ -1,19 +1,41 @@
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { WelcomeBanner } from "@/components/dashboard/WelcomeBanner";
 import { OverallPracticeCard, DEFAULT_SKILLS } from "@/components/dashboard/OverallPracticeCard";
 import { PerformanceOverview } from "@/components/dashboard/PerformanceOverview";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { usePerformanceAnalytics } from "@/hooks/usePerformanceAnalytics";
 import { usePracticeProgress } from "@/hooks/usePracticeProgress";
-import { supabaseConfigured } from "@/lib/supabase/client";
+import { supabase, supabaseConfigured } from "@/lib/supabase/client";
 import { subscriptionDaysRemaining } from "@/lib/subscription";
 import { useAuth } from "@/providers/AuthContext";
 
 export function DashboardPage() {
-  const { user, profile, profileLoading } = useAuth();
-  const { data, isLoading, error, refetch, isFetching } = useDashboardStats(user?.id, profile);
+  const { user, profile, profileLoading, refreshProfile } = useAuth();
+  const qc = useQueryClient();
+  const { data, isLoading, error, refetch } = useDashboardStats(user?.id, profile);
   const progressQ = usePracticeProgress(Boolean(user?.id));
+  const performanceQ = usePerformanceAnalytics(Boolean(user?.id), progressQ.data, user?.id);
+
+  const saveExamDate = useMutation({
+    mutationFn: async (isoDate: string) => {
+      if (!user) return;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ exam_deadline: isoDate, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+    },
+    onSuccess: async () => {
+      toast.success("Exam date saved");
+      await refreshProfile();
+      await qc.invalidateQueries({ queryKey: ["lc", "dashboard", user?.id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (!supabaseConfigured) {
     return (
@@ -42,7 +64,11 @@ export function DashboardPage() {
     );
   }
 
-  const loading = isLoading || profileLoading || isFetching || progressQ.isLoading;
+  const loading =
+    (isLoading && !data) ||
+    (profileLoading && !profile) ||
+    (progressQ.isLoading && !progressQ.data) ||
+    (performanceQ.isLoading && !performanceQ.data);
   const username = profile?.full_name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "there";
   const days = data?.daysUntilExam ?? null;
   const sub = data?.activeSubscription ?? null;
@@ -72,11 +98,14 @@ export function DashboardPage() {
       <div className="relative space-y-6">
         <WelcomeBanner
           username={username}
-          studyStreak={0}
+          studyStreak={data?.studyStreak ?? 0}
           questionsDone={totalDone}
           daysToExam={days}
+          examDate={profile?.exam_date ?? null}
           loading={loading}
-          targetLevel="B2 Level"
+          targetLevel={profile?.target_level ? `${profile.target_level} Level` : "B2 Level"}
+          savingExamDate={saveExamDate.isPending}
+          onExamDateSave={async (isoDate) => saveExamDate.mutateAsync(isoDate)}
         />
 
         <OverallPracticeCard
@@ -87,11 +116,7 @@ export function DashboardPage() {
         />
 
         <PerformanceOverview
-          weekPoints={data?.weekPoints ?? []}
-          sevenDayAvg={data?.sevenDayAvg ?? null}
-          todayAvg={data?.todayAvg ?? null}
-          highest={data?.highest ?? null}
-          totalAttempts={data?.totalAttempts ?? 0}
+          analytics={performanceQ.data}
           loading={loading}
         />
 

@@ -1,12 +1,9 @@
 import * as React from "react";
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
-  Bell,
   BookOpen,
-  Bug,
   ChevronDown,
   Crown,
-  Headphones,
   HelpCircle,
   Home,
   LayoutDashboard,
@@ -14,11 +11,9 @@ import {
   Phone,
   Settings,
   Shield,
-  ThumbsUp,
   FlaskConical,
   BookMarked,
   Menu,
-  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
@@ -57,9 +52,6 @@ const bottomNav: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings },
   { to: "/attempts", label: "Help (Q&A)", icon: HelpCircle },
   { to: "/subscription", label: "Contact Us", icon: Phone },
-  { to: "/subscription", label: "Tutor Feedback", icon: ThumbsUp },
-  { to: "/subscription", label: "Listening Hub", icon: Headphones },
-  { to: "/subscription", label: "Report a Bug", icon: Bug },
   { to: "/subscription", label: "Terms & Conditions", icon: Shield },
 ];
 
@@ -267,13 +259,6 @@ export function AppShell() {
               <Crown className="size-3" />
               Pro
             </Link>
-            <button type="button" className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-white/80 sm:flex">
-              <Wallet className="size-3.5" /> 0
-            </button>
-            <button type="button" className="relative flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-all hover:scale-110 hover:bg-white/10">
-              <Bell className="size-4" />
-              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">0</span>
-            </button>
             <div className="flex items-center gap-2">
               <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-xs font-bold text-white ring-2 ring-blue-500/30">
                 {initials}

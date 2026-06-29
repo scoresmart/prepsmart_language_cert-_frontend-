@@ -59,7 +59,7 @@ import { isAdminUser } from "@/lib/adminAccess";
 
 function RootRedirect() {
   const { user, profile, loading, profileLoading } = useAuth();
-  if (loading || (user && profileLoading)) {
+  if (loading || (user && profileLoading && !profile)) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-muted/30">
         <Skeleton className="h-12 w-48" />

@@ -31,6 +31,8 @@ type Props = {
   onStartRecording: () => void;
   onRecordingComplete: (blob: Blob) => void;
   onRetryMic?: () => void;
+  onExaminerPlaying?: (playing: boolean) => void;
+  onRegisterRecordingStop?: (stop: (() => void) | null) => void;
 };
 
 export function SpeakingQuestionPanel({
@@ -49,6 +51,8 @@ export function SpeakingQuestionPanel({
   onStartRecording,
   onRecordingComplete,
   onRetryMic,
+  onExaminerPlaying,
+  onRegisterRecordingStop,
 }: Props) {
   const imageSrc = question.image_url
     ? question.image_url.startsWith("http")
@@ -79,7 +83,7 @@ export function SpeakingQuestionPanel({
         <Bookmark className="size-4 shrink-0 text-slate-300" />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700 shadow-sm whitespace-pre-wrap">
         {question.content}
       </div>
 
@@ -97,6 +101,7 @@ export function SpeakingQuestionPanel({
         key={`${question.id}-${attemptKey}`}
         src={question.audio_url}
         autoPlay
+        onPlayingChange={onExaminerPlaying}
         onEnded={onStartPreparing}
       />
 
@@ -111,6 +116,7 @@ export function SpeakingQuestionPanel({
         onStartRecording={onStartRecording}
         onRecordingComplete={onRecordingComplete}
         onRetryMic={onRetryMic}
+        onRegisterStop={onRegisterRecordingStop}
       />
     </div>
   );

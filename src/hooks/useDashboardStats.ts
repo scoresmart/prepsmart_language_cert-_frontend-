@@ -6,6 +6,20 @@ import { pickAccessibleSubscription } from "@/lib/subscription";
 
 import { isRecoverableDbError } from "@/lib/supabase/errors";
 
+function computeStudyStreak(attempts: { completed_at: string }[]): number {
+  if (!attempts.length) return 0;
+  const practiceDays = new Set(
+    attempts.map((a) => format(startOfDay(new Date(a.completed_at)), "yyyy-MM-dd")),
+  );
+  let streak = 0;
+  let day = startOfDay(new Date());
+  while (practiceDays.has(format(day, "yyyy-MM-dd"))) {
+    streak += 1;
+    day = subDays(day, 1);
+  }
+  return streak;
+}
+
 export function useDashboardStats(userId: string | undefined, profile: LcUserProfile | null) {
   return useQuery({
     queryKey: ["lc", "dashboard", userId, profile?.exam_date],
@@ -100,6 +114,7 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
         rapidAvail,
         totalAttempts: attempts.length,
         daysUntilExam,
+        studyStreak: computeStudyStreak(attempts),
       };
     },
   });

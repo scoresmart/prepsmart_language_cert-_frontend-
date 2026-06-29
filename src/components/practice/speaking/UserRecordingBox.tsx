@@ -1,6 +1,7 @@
 import * as React from "react";
 import { AlertCircle, Info, Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSupportedRecordingMimeType } from "@/lib/recordingMimeType";
 import { AudioWaveBars } from "./AudioWaveBars";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ type Props = {
   onStartRecording: () => void;
   onRecordingComplete: (blob: Blob) => void;
   onRetryMic?: () => void;
+  onRegisterStop?: (stop: (() => void) | null) => void;
   className?: string;
 };
 
@@ -31,6 +33,7 @@ export function UserRecordingBox({
   onStartRecording,
   onRecordingComplete,
   onRetryMic,
+  onRegisterStop,
   className,
 }: Props) {
   const mediaRef = React.useRef<MediaRecorder | null>(null);
@@ -47,12 +50,23 @@ export function UserRecordingBox({
   }, []);
 
   const stopRecording = React.useCallback(() => {
-    if (mediaRef.current?.state === "recording") {
-      mediaRef.current.stop();
+    const recorder = mediaRef.current;
+    if (recorder?.state === "recording") {
+      try {
+        recorder.requestData();
+      } catch {
+        /* ignore */
+      }
+      recorder.stop();
     } else {
       finishRecording(new Blob());
     }
   }, [finishRecording]);
+
+  React.useEffect(() => {
+    onRegisterStop?.(stopRecording);
+    return () => onRegisterStop?.(null);
+  }, [stopRecording, onRegisterStop]);
 
   React.useEffect(() => {
     if (phase !== "recording" || !audioStream) return;
@@ -60,22 +74,32 @@ export function UserRecordingBox({
     completedRef.current = false;
     chunksRef.current = [];
 
-    const recorder = new MediaRecorder(audioStream);
+    const mimeType = getSupportedRecordingMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(audioStream, { mimeType })
+      : new MediaRecorder(audioStream);
     mediaRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      const type = recorder.mimeType || mimeType || "audio/webm";
+      const blob = new Blob(chunksRef.current, { type });
       finishRecording(blob);
     };
 
-    recorder.start();
+    recorder.start(250);
 
     return () => {
-      if (mediaRef.current?.state === "recording") {
-        mediaRef.current.stop();
+      const recorder = mediaRef.current;
+      if (recorder?.state === "recording") {
+        try {
+          recorder.requestData();
+        } catch {
+          /* ignore */
+        }
+        recorder.stop();
       }
       mediaRef.current = null;
     };
@@ -151,7 +175,9 @@ export function UserRecordingBox({
       )}
 
       {isRecorded && (
-        <p className="text-sm font-semibold text-emerald-700">Recording complete — review or submit your answer.</p>
+        <p className="text-sm font-semibold text-emerald-700">
+          Recording complete — saving and scoring your answer…
+        </p>
       )}
 
       <button
