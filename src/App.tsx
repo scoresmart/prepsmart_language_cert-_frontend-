@@ -13,22 +13,10 @@ import { AdminReadingPage } from "@/pages/admin/AdminReadingPage";
 import { AdminWritingPage } from "@/pages/admin/AdminWritingPage";
 import { AdminListeningPage } from "@/pages/admin/AdminListeningPage";
 import { AdminMockTestsPage } from "@/pages/admin/AdminMockTestsPage";
-import { AdminSectionalTestsPage } from "@/pages/admin/AdminSectionalTestsPage";
-import { AdminAnalysisRequestsPage } from "@/pages/admin/AdminAnalysisRequestsPage";
 import { AdminUserMockTestsPage } from "@/pages/admin/AdminUserMockTestsPage";
 import { AdminPracticeLogsPage } from "@/pages/admin/AdminPracticeLogsPage";
-import { AdminAIConversationsPage } from "@/pages/admin/AdminAIConversationsPage";
-import { AdminAITutorAnalyticsPage } from "@/pages/admin/AdminAITutorAnalyticsPage";
-import { AdminResourcesPage } from "@/pages/admin/AdminResourcesPage";
-import { AdminSectionLocksPage } from "@/pages/admin/AdminSectionLocksPage";
 import { AdminPromotionalPopupsPage } from "@/pages/admin/AdminPromotionalPopupsPage";
-import { AdminVocabularyPage } from "@/pages/admin/AdminVocabularyPage";
 import { AdminCouponsPage } from "@/pages/admin/AdminCouponsPage";
-import { AdminPaymentLinksPage } from "@/pages/admin/AdminPaymentLinksPage";
-import { AdminAITutorCreditsPage } from "@/pages/admin/AdminAITutorCreditsPage";
-import { AdminCuratedQAPage } from "@/pages/admin/AdminCuratedQAPage";
-import { AdminQuestionLogsPage } from "@/pages/admin/AdminQuestionLogsPage";
-import { AdminQAAnalyticsPage } from "@/pages/admin/AdminQAAnalyticsPage";
 import { AdminBulkImportPage } from "@/pages/admin/AdminBulkImportPage";
 import { MockTestCatalogPage } from "@/pages/MockTestCatalogPage";
 import { MockTestPreviousResultsPage } from "@/pages/MockTestPreviousResultsPage";
@@ -128,34 +116,20 @@ export default function App() {
 
               {/* Tests */}
               <Route path="/admin/mock-tests" element={<AdminMockTestsPage />} />
-              <Route path="/admin/sectional-tests" element={<AdminSectionalTestsPage />} />
 
               {/* Legacy questions route */}
               <Route path="/admin/questions" element={<AdminQuestionsPage />} />
 
               {/* Analytics & Logs */}
-              <Route path="/admin/analysis-requests" element={<AdminAnalysisRequestsPage />} />
               <Route path="/admin/user-mock-tests" element={<AdminUserMockTestsPage />} />
               <Route path="/admin/practice-logs" element={<AdminPracticeLogsPage />} />
-              <Route path="/admin/ai-conversations" element={<AdminAIConversationsPage />} />
-              <Route path="/admin/ai-tutor-analytics" element={<AdminAITutorAnalyticsPage />} />
               <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
 
               {/* Management */}
               <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/resources" element={<AdminResourcesPage />} />
-              <Route path="/admin/section-locks" element={<AdminSectionLocksPage />} />
               <Route path="/admin/promotional-popups" element={<AdminPromotionalPopupsPage />} />
-              <Route path="/admin/vocabulary" element={<AdminVocabularyPage />} />
               <Route path="/admin/subscriptions" element={<AdminSubscriptionsPage />} />
               <Route path="/admin/coupons" element={<AdminCouponsPage />} />
-              <Route path="/admin/payment-links" element={<AdminPaymentLinksPage />} />
-
-              {/* AI Tutor Q&A */}
-              <Route path="/admin/ai-tutor-credits" element={<AdminAITutorCreditsPage />} />
-              <Route path="/admin/curated-qa" element={<AdminCuratedQAPage />} />
-              <Route path="/admin/question-logs" element={<AdminQuestionLogsPage />} />
-              <Route path="/admin/qa-analytics" element={<AdminQAAnalyticsPage />} />
               <Route path="/admin/bulk-import" element={<AdminBulkImportPage />} />
             </Route>
           </Route>

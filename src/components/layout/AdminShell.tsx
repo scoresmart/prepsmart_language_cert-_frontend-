@@ -1,8 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Mic, BookOpen, PenLine, Headphones, FileText,
-  ClipboardList, BarChart2, Users, Layers, Lock, Megaphone, BookMarked,
-  CreditCard, Tag, Link2, Brain, MessageSquareText, History, PieChart,
+  Users, Megaphone, CreditCard, Tag, History,
   Upload, LogOut, ChevronRight, FlaskConical, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,33 +17,17 @@ const managementItems: NavItem[] = [
   { to: "/admin/writing", label: "Writing", icon: PenLine },
   { to: "/admin/listening", label: "Listening", icon: Headphones },
   { to: "/admin/mock-tests", label: "Mock Tests", icon: FileText },
-  { to: "/admin/sectional-tests", label: "Sectional Tests", icon: ClipboardList },
-  { to: "/admin/analysis-requests", label: "Analysis Requests", icon: BarChart2 },
   { to: "/admin/user-mock-tests", label: "User Mock Tests", icon: FlaskConical },
   { to: "/admin/practice-logs", label: "Practice Logs", icon: History },
-  { to: "/admin/ai-conversations", label: "AI Conversations", icon: MessageSquareText },
-  { to: "/admin/ai-tutor-analytics", label: "AI Tutor Analytics", icon: PieChart },
   { to: "/admin/users", label: "Users", icon: Users },
-  { to: "/admin/resources", label: "Resources", icon: Layers },
-  { to: "/admin/section-locks", label: "Section Locks", icon: Lock },
   { to: "/admin/promotional-popups", label: "Promotional Popups", icon: Megaphone },
-  { to: "/admin/vocabulary", label: "Vocabulary", icon: BookMarked },
   { to: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
   { to: "/admin/coupons", label: "Coupons", icon: Tag },
-  { to: "/admin/payment-links", label: "Payment Links", icon: Link2 },
-];
-
-const aiTutorItems: NavItem[] = [
-  { to: "/admin/ai-tutor-credits", label: "AI Tutor Credits", icon: Brain },
-  { to: "/admin/curated-qa", label: "Curated Q&A", icon: MessageSquareText },
-  { to: "/admin/question-logs", label: "Question Logs", icon: History },
-  { to: "/admin/qa-analytics", label: "Q&A Analytics", icon: PieChart },
   { to: "/admin/bulk-import", label: "Bulk Import", icon: Upload },
 ];
 
 const navSections: NavSection[] = [
   { title: "Management", items: managementItems },
-  { title: "AI Tutor Q&A", items: aiTutorItems },
 ];
 
 function SidebarNavItem({ item }: { item: NavItem }) {

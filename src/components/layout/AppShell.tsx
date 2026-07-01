@@ -5,12 +5,10 @@ import {
   ChevronDown,
   Crown,
   Home,
-  LayoutDashboard,
   LogOut,
   Settings,
   Shield,
   FlaskConical,
-  BookMarked,
   Menu,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthContext";
@@ -34,14 +32,6 @@ const mainNav: NavItem[] = [
     children: [
       { to: "/mock-tests", label: "Mock Test Catalog", icon: FlaskConical },
       { to: "/attempts", label: "My Attempts", icon: BookOpen },
-      { to: "/analytics", label: "Analytics", icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: "Vocab",
-    icon: BookMarked,
-    children: [
-      { to: "/practice/reading", label: "Word Lists", icon: BookOpen },
     ],
   },
 ];
