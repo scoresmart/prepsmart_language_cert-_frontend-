@@ -41,6 +41,7 @@ import { PracticeQuestionsHubPage } from "@/pages/PracticeQuestionsHubPage";
 import { PracticeWorkspaceRedirect } from "@/pages/PracticeWorkspaceRedirect";
 import { SignupPage } from "@/pages/SignupPage";
 import { SubscriptionPage } from "@/pages/SubscriptionPage";
+import { TermsPage } from "@/pages/TermsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useAuth } from "@/providers/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/terms" element={<TermsPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route

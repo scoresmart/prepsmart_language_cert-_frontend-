@@ -38,7 +38,7 @@ const mainNav: NavItem[] = [
 
 const bottomNav: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings },
-  { to: "/subscription", label: "Terms & Conditions", icon: Shield },
+  { to: "/terms", label: "Terms & Conditions", icon: Shield },
 ];
 
 function NavGroup({ item }: { item: NavItem }) {
