@@ -3,10 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type WritingQuestion, type ListeningQuestion, type ReadingQuestion } from "@/lib/api";
 import { PracticeScoringDialog } from "@/components/practice/PracticeScoringDialog";
 import { PracticeTaskFooterActions } from "@/components/practice/PracticeActionButtons";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2,
-  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListeningPracticeShell } from "@/components/practice/listening/ListeningPracticeShell";
@@ -19,6 +17,15 @@ import {
   ReadingSentenceCard,
 } from "@/components/practice/reading/ReadingDragDrop";
 import { ReadingStatementSelect } from "@/components/practice/reading/ReadingTextSelect";
+import {
+  ReadingResultsDialog,
+  useReadingResultsDialog,
+} from "@/components/practice/reading/ReadingResultsDialog";
+import {
+  ListeningResultsDialog,
+  useListeningResultsDialog,
+} from "@/components/practice/listening/ListeningResultsDialog";
+import { buildObjectiveResult } from "@/lib/objectiveScoreUtils";
 import { WritingPracticeShell } from "@/components/practice/writing/WritingPracticeShell";
 import {
   WritingPart1AnswerPanel,
@@ -31,6 +38,7 @@ import {
   normalizeListeningPart3Data,
   normalizeListeningPart4Data,
 } from "@/lib/listeningQuestionData";
+import { LISTENING_PART_TITLES } from "@/lib/listeningInstructions";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
 import { notifyMockTestScoreFromAttempt, notifyMockWritingAiScore } from "@/lib/mockTestRecorder";
 import { useSubmitLock } from "@/hooks/useSubmitLock";
@@ -101,30 +109,6 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-interface ResultsScreenProps {
-  score: number;
-  total: number;
-  children?: React.ReactNode;
-}
-
-function SectionOutcome({
-  revealed,
-  deferResults,
-  score,
-  total,
-}: {
-  revealed: boolean;
-  deferResults: boolean;
-  isLastStep: boolean;
-  score: number;
-  total: number;
-  onRetry: () => void;
-}) {
-  if (!revealed) return null;
-  if (deferResults) return null;
-  return <ResultsScreen score={score} total={total} />;
-}
-
 function practiceFooterTop(submitted: boolean, deferResults: boolean, isLastStep: boolean) {
   if (!submitted || !deferResults) return undefined;
   return (
@@ -157,27 +141,6 @@ function practiceTaskFooter(p: {
       onRedo={p.onRedo}
       submitVariant={p.submitVariant}
     />
-  );
-}
-
-function ResultsScreen({ score, total, children }: ResultsScreenProps) {
-  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-  const colour = pct >= 70 ? "text-green-600" : pct >= 50 ? "text-amber-600" : "text-red-600";
-
-  return (
-    <div className="space-y-6">
-      <Card className="border-0 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-        <CardContent className="pt-8 pb-8 text-center space-y-3">
-          <Trophy className={cn("size-10 mx-auto", colour)} />
-          <p className="text-3xl font-bold text-slate-800">{score} / {total}</p>
-          <p className={cn("text-lg font-semibold", colour)}>{pct}%</p>
-          <p className="text-sm text-slate-500">
-            {pct >= 70 ? "Great work!" : pct >= 50 ? "Good effort — keep practising!" : "Keep going — practice makes perfect!"}
-          </p>
-        </CardContent>
-      </Card>
-      {children}
-    </div>
   );
 }
 
@@ -496,8 +459,23 @@ function Reading1ARunner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      items.map((item, i) => ({
+        label: `Question ${i + 1}`,
+        studentAnswer: answers[i] ?? "—",
+        correctAnswer: LABELS[item.correctAnswer],
+        isCorrect: answers[i] === LABELS[item.correctAnswer],
+      })),
+      "questions answered correctly",
+    );
+  }, [submitted, deferResults, items, answers]);
 
   return (
+    <>
+      <ReadingResultsDialog open={resultsOpen} onOpenChange={setResultsOpen} result={objectiveResult} />
     <ReadingPracticeShell
       activePart="1a"
       setIndex={setIndex}
@@ -532,19 +510,10 @@ function Reading1ARunner({
               onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
             />
           ))}
-          {submitted && (
-            <SectionOutcome
-              revealed={submitted}
-              deferResults={deferResults}
-              isLastStep={isLastStep}
-              score={score}
-              total={items.length}
-              onRetry={onRetry}
-            />
-          )}
         </>
       )}
     </ReadingPracticeShell>
+    </>
   );
 }
 
@@ -594,6 +563,19 @@ function Reading1BRunner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      gapOptions.map((gap, i) => ({
+        label: `Blank ${gapStartNum + i}`,
+        studentAnswer: answers[i] ?? "—",
+        correctAnswer: LABELS[gap.correctAnswer],
+        isCorrect: answers[i] === LABELS[gap.correctAnswer],
+      })),
+      "blanks filled correctly",
+    );
+  }, [submitted, deferResults, gapOptions, answers, gapStartNum]);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -625,20 +607,12 @@ function Reading1BRunner({
           onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [gi]: label }))}
         />
       ))}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={gapOptions.length}
-          onRetry={onRetry}
-        />
-      )}
     </div>
   );
 
   return (
+    <>
+      <ReadingResultsDialog open={resultsOpen} onOpenChange={setResultsOpen} result={objectiveResult} />
     <ReadingPracticeShell
       activePart="1b"
       layout="split"
@@ -659,6 +633,7 @@ function Reading1BRunner({
       })}
       footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
+    </>
   );
 }
 
@@ -723,6 +698,19 @@ function Reading2Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      gaps.map((g) => ({
+        label: `Gap ${g}`,
+        studentAnswer: selections[g] ? `Sentence ${selections[g]}` : "—",
+        correctAnswer: `Sentence ${data.correctMapping[g]}`,
+        isCorrect: selections[g] === data.correctMapping[g],
+      })),
+      "gaps filled correctly",
+    );
+  }, [submitted, deferResults, gaps, selections, data.correctMapping]);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -790,20 +778,12 @@ function Reading2Runner({
           ))}
         </div>
       )}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={gaps.length}
-          onRetry={onRetry}
-        />
-      )}
     </div>
   );
 
   return (
+    <>
+      <ReadingResultsDialog open={resultsOpen} onOpenChange={setResultsOpen} result={objectiveResult} />
     <ReadingPracticeShell
       activePart="2"
       layout="split"
@@ -824,6 +804,7 @@ function Reading2Runner({
       })}
       footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
+    </>
   );
 }
 
@@ -874,6 +855,19 @@ function Reading3Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      data.statements.map((stmt, i) => ({
+        label: `Statement ${i + 1}`,
+        studentAnswer: answers[i] ?? "—",
+        correctAnswer: stmt.correctAnswer,
+        isCorrect: answers[i] === stmt.correctAnswer,
+      })),
+      "statements matched correctly",
+    );
+  }, [submitted, deferResults, data.statements, answers]);
 
   const leftPanel = (
     <div className="space-y-4">
@@ -898,20 +892,12 @@ function Reading3Runner({
           onChange={(label) => !submitted && setAnswers((prev) => ({ ...prev, [i]: label }))}
         />
       ))}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={data.statements.length}
-          onRetry={onRetry}
-        />
-      )}
     </div>
   );
 
   return (
+    <>
+      <ReadingResultsDialog open={resultsOpen} onOpenChange={setResultsOpen} result={objectiveResult} />
     <ReadingPracticeShell
       activePart="3"
       layout="split"
@@ -932,6 +918,7 @@ function Reading3Runner({
       })}
       footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
+    </>
   );
 }
 
@@ -982,6 +969,19 @@ function Reading4Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      data.questions.map((q, i) => ({
+        label: `Question ${i + 1}`,
+        studentAnswer: answers[i] ?? "—",
+        correctAnswer: q.correctAnswer,
+        isCorrect: answers[i] === q.correctAnswer,
+      })),
+      "questions answered correctly",
+    );
+  }, [submitted, deferResults, data.questions, answers]);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -1006,20 +1006,12 @@ function Reading4Runner({
           onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
         />
       ))}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={data.questions.length}
-          onRetry={onRetry}
-        />
-      )}
     </div>
   );
 
   return (
+    <>
+      <ReadingResultsDialog open={resultsOpen} onOpenChange={setResultsOpen} result={objectiveResult} />
     <ReadingPracticeShell
       activePart="4"
       layout="split"
@@ -1040,6 +1032,7 @@ function Reading4Runner({
       })}
       footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
+    </>
   );
 }
 
@@ -1173,8 +1166,29 @@ function Listening1Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useListeningResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      items.map((item, i) => ({
+        label: `Question ${i + 1}`,
+        studentAnswer: answers[i] ?? "—",
+        correctAnswer: item.correctAnswer,
+        isCorrect: answers[i] === item.correctAnswer,
+      })),
+      "questions answered correctly",
+    );
+  }, [submitted, deferResults, items, answers]);
 
   return (
+    <>
+      <ListeningResultsDialog
+        open={resultsOpen}
+        onOpenChange={setResultsOpen}
+        result={objectiveResult}
+        partNumber={1}
+        partTitle={LISTENING_PART_TITLES[1]}
+      />
     <ListeningPracticeShell
       activePart={1}
       audioUrl={audioUrl}
@@ -1210,19 +1224,10 @@ function Listening1Runner({
               onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
             />
           ))}
-          {submitted && (
-            <SectionOutcome
-              revealed={submitted}
-              deferResults={deferResults}
-              isLastStep={isLastStep}
-              score={score}
-              total={items.length}
-              onRetry={onRetry}
-            />
-          )}
         </>
       )}
     </ListeningPracticeShell>
+    </>
   );
 }
 
@@ -1279,10 +1284,40 @@ function Listening2Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useListeningResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults) return null;
+    return buildObjectiveResult(
+      allSubQuestions.map(({ ci, qi, q }, idx) => ({
+        label: `Question ${idx + 1}`,
+        studentAnswer: answers[`${ci}-${qi}`] ?? "—",
+        correctAnswer: q.correctAnswer,
+        isCorrect: answers[`${ci}-${qi}`] === q.correctAnswer,
+      })),
+      "questions answered correctly",
+    );
+  }, [submitted, deferResults, allSubQuestions, answers]);
+  const listeningBreakdown = React.useMemo(() => {
+    if (!submitted || deferResults) return undefined;
+    return conversations.map((conv, ci) => {
+      const subs = conv.questions ?? [];
+      const convScore = subs.filter((sq, qi) => answers[`${ci}-${qi}`] === sq.correctAnswer).length;
+      return { label: `Conversation ${ci + 1}`, score: convScore, max: subs.length };
+    });
+  }, [submitted, deferResults, conversations, answers]);
 
   let questionNum = 0;
 
   return (
+    <>
+      <ListeningResultsDialog
+        open={resultsOpen}
+        onOpenChange={setResultsOpen}
+        result={objectiveResult}
+        partNumber={2}
+        partTitle={LISTENING_PART_TITLES[2]}
+        breakdown={listeningBreakdown}
+      />
     <ListeningPracticeShell
       activePart={2}
       audioUrl={audioUrl}
@@ -1332,17 +1367,8 @@ function Listening2Runner({
           })}
         </div>
       ))}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={allSubQuestions.length}
-          onRetry={onRetry}
-        />
-      )}
     </ListeningPracticeShell>
+    </>
   );
 }
 
@@ -1390,6 +1416,48 @@ function Listening3Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useListeningResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults || !data) return null;
+    return buildObjectiveResult(
+      answers.map((ans, i) => ({
+        label: `Blank ${i + 1}`,
+        studentAnswer: inputs[i] ?? "—",
+        correctAnswer: ans,
+        isCorrect: (inputs[i] ?? "").trim().toLowerCase() === ans.trim().toLowerCase(),
+      })),
+      "blanks filled correctly",
+    );
+  }, [submitted, deferResults, data, answers, inputs]);
+  const answerSummary = React.useMemo(() => {
+    if (!data || !submitted || deferResults) return undefined;
+    const textParts = data.questionText.split(/\[___(\d+)___\]/g);
+    return (
+      <>
+        {textParts.map((part, pi) => {
+          if (pi % 2 === 0) return <span key={pi}>{part}</span>;
+          const idx = parseInt(part) - 1;
+          const correct = answers[idx] ?? "";
+          const val = inputs[idx] ?? "";
+          const isCorrect = val.trim().toLowerCase() === correct.trim().toLowerCase();
+          return (
+            <span
+              key={pi}
+              className={cn(
+                "mx-0.5 rounded px-1.5 py-0.5 font-semibold",
+                isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800 line-through",
+              )}
+            >
+              {val || "—"}
+              {!isCorrect && (
+                <span className="ml-1 font-medium text-emerald-700 no-underline">({correct})</span>
+              )}
+            </span>
+          );
+        })}
+      </>
+    );
+  }, [data, submitted, deferResults, answers, inputs]);
 
   if (!data) {
     return (
@@ -1410,6 +1478,15 @@ function Listening3Runner({
   const parts = data.questionText.split(/\[___(\d+)___\]/g);
 
   return (
+    <>
+      <ListeningResultsDialog
+        open={resultsOpen}
+        onOpenChange={setResultsOpen}
+        result={objectiveResult}
+        partNumber={3}
+        partTitle={LISTENING_PART_TITLES[3]}
+        answerSummary={answerSummary}
+      />
     <ListeningPracticeShell
       activePart={3}
       audioUrl={audioUrl}
@@ -1467,17 +1544,8 @@ function Listening3Runner({
           </p>
         </div>
       </div>
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={answers.length}
-          onRetry={onRetry}
-        />
-      )}
     </ListeningPracticeShell>
+    </>
   );
 }
 
@@ -1526,6 +1594,19 @@ function Listening4Runner({
       ),
   );
   const showAnswers = mockShowAnswers(submitted, deferResults);
+  const { open: resultsOpen, setOpen: setResultsOpen } = useListeningResultsDialog(submitted, deferResults);
+  const objectiveResult = React.useMemo(() => {
+    if (!submitted || deferResults || qs.length === 0) return null;
+    return buildObjectiveResult(
+      qs.map((q, i) => ({
+        label: `Question ${i + 1}`,
+        studentAnswer: answers[i] !== undefined ? LABELS[answers[i]!] : "—",
+        correctAnswer: LABELS[q.correctAnswer],
+        isCorrect: answers[i] === q.correctAnswer,
+      })),
+      "questions answered correctly",
+    );
+  }, [submitted, deferResults, qs, answers]);
 
   if (!data || qs.length === 0) {
     return (
@@ -1544,6 +1625,14 @@ function Listening4Runner({
   }
 
   return (
+    <>
+      <ListeningResultsDialog
+        open={resultsOpen}
+        onOpenChange={setResultsOpen}
+        result={objectiveResult}
+        partNumber={4}
+        partTitle={LISTENING_PART_TITLES[4]}
+      />
     <ListeningPracticeShell
       activePart={4}
       audioUrl={audioUrl}
@@ -1584,17 +1673,8 @@ function Listening4Runner({
           }}
         />
       ))}
-      {submitted && (
-        <SectionOutcome
-          revealed={showAnswers}
-          deferResults={deferResults}
-          isLastStep={isLastStep}
-          score={score}
-          total={qs.length}
-          onRetry={onRetry}
-        />
-      )}
     </ListeningPracticeShell>
+    </>
   );
 }
 

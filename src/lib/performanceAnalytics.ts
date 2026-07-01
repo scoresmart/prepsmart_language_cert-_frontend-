@@ -40,6 +40,36 @@ export function attemptPercent(score: number, total: number): number | null {
   return (Number(score) / Number(total)) * 100;
 }
 
+/** Prefer scored value from score_details when the attempt row still has placeholder 0. */
+export function resolveAttemptScore(attempt: {
+  score: number;
+  total: number;
+  score_details?: object | Record<string, unknown> | null;
+  scoring_status?: string | null;
+}): { score: number; total: number } {
+  const total = Number(attempt.total) || 0;
+  let score = Number(attempt.score) || 0;
+  const details = attempt.score_details;
+
+  if (details && typeof details === "object") {
+    const typed = details as { type?: string; scores?: Record<string, unknown> };
+    const scores = typed.scores;
+
+    if (typed.type === "speaking" && typeof scores?.scaledTotal === "number") {
+      return { score: scores.scaledTotal, total: total || 50 };
+    }
+    if (typed.type === "writing" && typeof scores?.total === "number") {
+      return { score: scores.total, total: total || 12 };
+    }
+  }
+
+  if (score === 0 && attempt.scoring_status === "completed" && total > 0) {
+    return { score, total };
+  }
+
+  return { score, total };
+}
+
 export function formatQuestionTypeLabel(questionType: string): string {
   return questionType
     .replace(/_/g, " ")

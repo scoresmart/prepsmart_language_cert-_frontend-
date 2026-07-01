@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
 import type { PracticeQuestionItem } from "@/lib/practiceQuestions";
+import { resolveAttemptScore } from "@/lib/performanceAnalytics";
 import {
   SPEAKING_PART_ABBREV,
   speakingPartFromQuestionType,
@@ -126,6 +127,7 @@ function SpeakingAttemptItem({
   const taskAbbrev = part ? (SPEAKING_PART_ABBREV[part] ?? `S${part}`) : "SP";
   const speakingDetails = asSpeakingScore(attempt.score_details);
   const remoteRecording = speakingDetails?.recordingUrl ?? null;
+  const { score: displayScore, total: displayTotal } = resolveAttemptScore(attempt);
 
   React.useEffect(() => {
     if (remoteRecording) {
@@ -165,10 +167,10 @@ function SpeakingAttemptItem({
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <TaskTypeBadge label={taskAbbrev} />
-        {attempt.total > 0 && (
+        {displayTotal > 0 && (
           <ScoreInfoBadge
-            score={attempt.score}
-            total={attempt.total}
+            score={displayScore}
+            total={displayTotal}
             onClick={() => onOpenScoreInfo(attempt)}
             disabled={attempt.scoring_status === "scoring"}
           />
@@ -304,6 +306,7 @@ export function PracticeMyAttemptsContent({
           <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 bg-white">
             {questionAttempts.map((att) => {
               const answer = getLocalAnswer(att.question_set_id);
+              const { score: displayScore, total: displayTotal } = resolveAttemptScore(att);
               return (
                 <li key={att.id} className="p-4">
                   <div className="flex w-full items-start gap-3 text-left">
@@ -313,13 +316,13 @@ export function PracticeMyAttemptsContent({
                         Attempt {format(new Date(att.created_at), "dd MMM yyyy, HH:mm")}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {att.total > 0 ? (
+                        {displayTotal > 0 ? (
                           isBasicScoreModule ? (
-                            <BasicAttemptScore score={att.score} total={att.total} />
+                            <BasicAttemptScore score={displayScore} total={displayTotal} />
                           ) : (
                             <ScoreInfoBadge
-                              score={att.score}
-                              total={att.total}
+                              score={displayScore}
+                              total={displayTotal}
                               onClick={() => void openScoreInfo(att)}
                               disabled={att.scoring_status === "scoring"}
                             />

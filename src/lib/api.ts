@@ -802,6 +802,24 @@ export const api = {
           }[]
         >
       >(`/practice/attempts/mine${qs({ question_type })}`),
+    adminLogs: (limit?: number) =>
+      request<
+        ApiResponse<
+          {
+            id: string;
+            student_id: string;
+            question_type: string;
+            question_set_id: string;
+            module: string | null;
+            score: number;
+            total: number;
+            scoring_status?: string;
+            created_at: string;
+            student_name: string | null;
+            student_email: string | null;
+          }[]
+        >
+      >(`/practice/attempts/admin${qs({ limit })}`),
     progress: () =>
       request<
         ApiResponse<{

@@ -1,6 +1,5 @@
 import { CalendarDays, Flame, Target, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LCPracticeDropdown } from "@/components/layout/LCPracticeDropdown";
 import { ExamDatePicker } from "@/components/dashboard/ExamDatePicker";
 import { cn } from "@/lib/utils";
 
@@ -115,14 +114,11 @@ export function WelcomeBanner({
         </div>
 
         <div
-          className="relative z-20 animate-fade-in-up overflow-visible rounded-2xl border border-dashed border-white/25 bg-white/10 p-4 backdrop-blur-md sm:flex sm:items-center sm:justify-between sm:gap-4"
+          className="relative z-20 animate-fade-in-up overflow-visible rounded-2xl border border-dashed border-white/25 bg-white/10 p-4 backdrop-blur-md"
           style={{ animationDelay: "320ms" }}
         >
-          <div>
-            <p className="font-semibold">Start strong and stay consistent! 💪</p>
-            <p className="text-xs text-white/65">Practice Language Cert like a real exam with PrepSmart LC.</p>
-          </div>
-          <LCPracticeDropdown triggerVariant="cta" align="right" className="mt-3 shrink-0 sm:mt-0" />
+          <p className="font-semibold">Start strong and stay consistent! 💪</p>
+          <p className="text-xs text-white/65">Practice Language Cert like a real exam with PrepSmart LC.</p>
         </div>
       </div>
     </div>

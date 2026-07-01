@@ -21,12 +21,14 @@ export function SpeakingAttemptAudioPlayer({ src, className }: Props) {
   };
 
   const formatTime = (s: number) => {
+    if (!Number.isFinite(s) || s < 0) return "0:00";
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${String(sec).padStart(2, "0")}`;
   };
 
-  const pct = duration > 0 ? (progress / duration) * 100 : 0;
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const pct = safeDuration > 0 ? (progress / safeDuration) * 100 : 0;
 
   return (
     <div className={cn("flex items-center gap-3 rounded-lg bg-slate-100 px-3 py-2", className)}>
@@ -38,7 +40,14 @@ export function SpeakingAttemptAudioPlayer({ src, className }: Props) {
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          setDuration(Number.isFinite(d) ? d : 0);
+        }}
+        onDurationChange={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setDuration(d);
+        }}
         onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
       />
       <button
@@ -54,7 +63,7 @@ export function SpeakingAttemptAudioPlayer({ src, className }: Props) {
           <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${pct}%` }} />
         </div>
         <p className="mt-1 text-[10px] tabular-nums text-slate-500">
-          {formatTime(progress)} / {formatTime(duration)}
+          {formatTime(progress)} / {safeDuration > 0 ? formatTime(safeDuration) : "--:--"}
         </p>
       </div>
     </div>

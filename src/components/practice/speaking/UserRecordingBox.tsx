@@ -19,6 +19,8 @@ type Props = {
   onRecordingComplete: (blob: Blob) => void;
   onRetryMic?: () => void;
   onRegisterStop?: (stop: (() => void) | null) => void;
+  recordingBlob?: Blob | null;
+  onPlaybackStarted?: () => void;
   className?: string;
   compact?: boolean;
 };
@@ -35,12 +37,17 @@ export function UserRecordingBox({
   onRecordingComplete,
   onRetryMic,
   onRegisterStop,
+  recordingBlob = null,
+  onPlaybackStarted,
   className,
   compact = false,
 }: Props) {
   const mediaRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const completedRef = React.useRef(false);
+  const playbackRef = React.useRef<HTMLAudioElement>(null);
+  const autoPlayAttemptedRef = React.useRef(false);
+  const [playbackUrl, setPlaybackUrl] = React.useState<string | null>(null);
 
   const onCompleteRef = React.useRef(onRecordingComplete);
   onCompleteRef.current = onRecordingComplete;
@@ -64,6 +71,43 @@ export function UserRecordingBox({
       finishRecording(new Blob());
     }
   }, [finishRecording]);
+
+  React.useEffect(() => {
+    if (phase !== "recorded" || !recordingBlob) {
+      setPlaybackUrl(null);
+      autoPlayAttemptedRef.current = false;
+      return;
+    }
+
+    const url = URL.createObjectURL(recordingBlob);
+    setPlaybackUrl(url);
+    autoPlayAttemptedRef.current = false;
+
+    return () => URL.revokeObjectURL(url);
+  }, [phase, recordingBlob]);
+
+  React.useEffect(() => {
+    if (phase !== "recorded" || !playbackUrl || autoPlayAttemptedRef.current) return;
+
+    autoPlayAttemptedRef.current = true;
+
+    const tryPlay = () => {
+      const audio = playbackRef.current;
+      if (!audio) {
+        window.requestAnimationFrame(tryPlay);
+        return;
+      }
+      void audio.play().catch(() => {
+        /* Autoplay may be blocked — user can press play manually. */
+      });
+    };
+
+    tryPlay();
+  }, [phase, playbackUrl]);
+
+  const handlePlaybackStarted = React.useCallback(() => {
+    onPlaybackStarted?.();
+  }, [onPlaybackStarted]);
 
   React.useEffect(() => {
     onRegisterStop?.(stopRecording);
@@ -127,7 +171,7 @@ export function UserRecordingBox({
     if (isRecording) {
       return `Recording 00:${String(elapsed).padStart(2, "0")} / 00:${String(maxDuration).padStart(2, "0")}`;
     }
-    if (isRecorded) return "Recording complete";
+    if (isRecorded) return "Review your recording before submitting";
     return null;
   })();
 
@@ -250,7 +294,23 @@ export function UserRecordingBox({
           </>
         )}
 
-        {isRecorded && (
+        {isRecorded && playbackUrl && (
+          <div className="w-full max-w-sm space-y-2 text-left">
+            <p className="text-center text-[11px] font-medium text-emerald-800 sm:text-xs">
+              Listen to your answer — Submit unlocks once playback starts
+            </p>
+            <audio
+              ref={playbackRef}
+              controls
+              src={playbackUrl}
+              className="w-full"
+              preload="auto"
+              onPlay={handlePlaybackStarted}
+            />
+          </div>
+        )}
+
+        {isRecorded && !playbackUrl && (
           <AudioWaveBars active={false} compact={compact} colorClass="bg-emerald-500" />
         )}
       </div>

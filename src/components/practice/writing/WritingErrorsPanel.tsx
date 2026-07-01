@@ -34,6 +34,23 @@ function highlightSpellingInText(text: string, spellingErrors: WritingError[]) {
   });
 }
 
+export function HighlightedWritingAnswer({
+  text,
+  errors = [],
+  className,
+}: {
+  text: string;
+  errors?: WritingError[];
+  className?: string;
+}) {
+  const spelling = errors.filter((e) => e.type === "spelling");
+  return (
+    <p className={cn("whitespace-pre-wrap text-sm leading-relaxed text-slate-800", className)}>
+      {spelling.length > 0 ? highlightSpellingInText(text, spelling) : text}
+    </p>
+  );
+}
+
 export function WritingErrorsPanel({
   responseText,
   errors = [],

@@ -8,6 +8,7 @@ import {
   attemptPercent,
   formatQuestionTypeLabel,
   moduleForQuestionType,
+  resolveAttemptScore,
 } from "@/lib/performanceAnalytics";
 import { moduleUrl } from "@/lib/practiceRoutes";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,8 @@ function scoreTextClass(pct: number | null): string {
 
 function AttemptRow({ attempt }: { attempt: PracticeAttemptRow }) {
   const module = moduleForQuestionType(attempt.question_type);
-  const pct = attemptPercent(attempt.score, attempt.total);
+  const { score, total } = resolveAttemptScore(attempt);
+  const pct = attemptPercent(score, total);
   const moduleLabel = module ? module.charAt(0).toUpperCase() + module.slice(1) : "Practice";
   const practiceLink = module ? moduleUrl(module) : "/practice";
 
@@ -52,10 +54,10 @@ function AttemptRow({ attempt }: { attempt: PracticeAttemptRow }) {
           </p>
         </div>
         <div className="shrink-0 text-right">
-          {attempt.total > 0 ? (
+          {total > 0 ? (
             <>
               <p className={cn("text-lg font-bold tabular-nums", scoreTextClass(pct))}>
-                {attempt.score}/{attempt.total}
+                {score}/{total}
               </p>
               {pct != null && (
                 <p className={cn("text-xs font-semibold tabular-nums", scoreTextClass(pct))}>{Math.round(pct)}%</p>

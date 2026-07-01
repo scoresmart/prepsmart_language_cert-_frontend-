@@ -33,6 +33,8 @@ type Props = {
   onRetryMic?: () => void;
   onExaminerPlaying?: (playing: boolean) => void;
   onRegisterRecordingStop?: (stop: (() => void) | null) => void;
+  recordingBlob?: Blob | null;
+  onPlaybackStarted?: () => void;
 };
 
 export function SpeakingQuestionPanel({
@@ -53,6 +55,8 @@ export function SpeakingQuestionPanel({
   onRetryMic,
   onExaminerPlaying,
   onRegisterRecordingStop,
+  recordingBlob,
+  onPlaybackStarted,
 }: Props) {
   const imageSrc = question.image_url
     ? question.image_url.startsWith("http")
@@ -115,6 +119,8 @@ export function SpeakingQuestionPanel({
           onRecordingComplete={onRecordingComplete}
           onRetryMic={onRetryMic}
           onRegisterStop={onRegisterRecordingStop}
+          recordingBlob={recordingBlob}
+          onPlaybackStarted={onPlaybackStarted}
         />
       </div>
     </div>

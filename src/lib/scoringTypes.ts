@@ -55,6 +55,10 @@ export interface SpeakingScoreResult {
   };
   grade: PracticeGrade;
   recordingUrl?: string;
+  contentMetrics?: {
+    wordsSpoken: number;
+  };
+  wordsToPractice?: Array<{ word: string; tip: string }>;
 }
 
 export type ScoringPhase = "idle" | "scoring" | "done" | "error";

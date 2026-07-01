@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Mic, BookOpen, PenLine, Headphones, FileText,
-  Users, Megaphone, CreditCard, Tag, History,
+  Users, Megaphone, CreditCard, Tag, History, BookOpenCheck,
   Upload, LogOut, ChevronRight, FlaskConical, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ const managementItems: NavItem[] = [
   { to: "/admin/reading", label: "Reading", icon: BookOpen },
   { to: "/admin/writing", label: "Writing", icon: PenLine },
   { to: "/admin/listening", label: "Listening", icon: Headphones },
+  { to: "/admin/questions", label: "Practice Questions", icon: BookOpenCheck },
   { to: "/admin/mock-tests", label: "Mock Tests", icon: FileText },
   { to: "/admin/user-mock-tests", label: "User Mock Tests", icon: FlaskConical },
   { to: "/admin/practice-logs", label: "Practice Logs", icon: History },

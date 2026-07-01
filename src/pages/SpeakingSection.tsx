@@ -40,6 +40,7 @@ import { PracticeTaskFooterActions } from "@/components/practice/PracticeActionB
 import { useSubmitLock } from "@/hooks/useSubmitLock";
 
 import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
+import { extractReadAloudText } from "@/lib/speakingScoreUtils";
 
 import type { RecordingPhase } from "@/components/practice/speaking/UserRecordingBox";
 
@@ -149,6 +150,7 @@ function SpeakingRunner({
   const [recordLeft, setRecordLeft] = React.useState(partTiming.recordSeconds);
 
   const [recordingBlob, setRecordingBlob] = React.useState<Blob | null>(null);
+  const [playbackStarted, setPlaybackStarted] = React.useState(false);
 
   const [micStream, setMicStream] = React.useState<MediaStream | null>(null);
 
@@ -271,6 +273,7 @@ function SpeakingRunner({
     setRecordLeft(partTiming.recordSeconds);
 
     setRecordingBlob(null);
+    setPlaybackStarted(false);
 
     setSubmitted(false);
 
@@ -438,6 +441,8 @@ function SpeakingRunner({
         setSpeakingScore(res.data);
         notifyMockSpeakingAiScore(part, res.data.scores.scaledTotal);
         setScoringPhase("done");
+        onAttemptSaved?.();
+        scoringInFlightRef.current = false;
       } catch (error) {
         setScoringError(error instanceof Error ? error.message : "Scoring failed");
         setScoringPhase("error");
@@ -451,16 +456,14 @@ function SpeakingRunner({
     (blob: Blob) => {
       const validBlob = blob.size > 0 ? blob : null;
       setRecordingBlob(validBlob);
+      setPlaybackStarted(false);
       setPhase("recorded");
-      if (validBlob) {
-        void runSubmit(() => submitRecordingForScoring(validBlob));
-      }
     },
-    [runSubmit, submitRecordingForScoring],
+    [],
   );
 
   const handleSubmit = () => {
-    if (!question || submitted || isSubmitting || !recordingBlob) return;
+    if (!question || submitted || isSubmitting || !recordingBlob || !playbackStarted) return;
     void runSubmit(() => submitRecordingForScoring(recordingBlob));
   };
 
@@ -505,9 +508,13 @@ function SpeakingRunner({
       <div className="mb-2 w-full">
         <MockSectionSavedNotice isLastStep={mockRun?.isLastStep} />
       </div>
+    ) : phase === "recorded" && !playbackStarted && !submitted ? (
+      <p className="mb-2 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+        Your recording will play automatically. Submit unlocks once playback starts — you may submit before it finishes.
+      </p>
     ) : null;
 
-  const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob);
+  const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob) && playbackStarted;
 
   const footer = (
     <PracticeTaskFooterActions
@@ -535,6 +542,7 @@ function SpeakingRunner({
       error={scoringError}
       speaking={speakingScore}
       recordingUrl={recordingUrl}
+      referenceText={question ? extractReadAloudText(question.content) : null}
     />
 
     <SpeakingPracticeShell
@@ -585,6 +593,8 @@ function SpeakingRunner({
         onRegisterRecordingStop={(stop) => {
           stopRecordingRef.current = stop;
         }}
+        recordingBlob={recordingBlob}
+        onPlaybackStarted={() => setPlaybackStarted(true)}
       />
 
     </SpeakingPracticeShell>
