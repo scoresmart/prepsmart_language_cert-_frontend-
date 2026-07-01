@@ -50,11 +50,19 @@ export function ReadingMcqBlock({
                 revealed && !isSelected && !isCorrect && "opacity-50",
                 showCorrect && "bg-emerald-50",
                 showWrong && "bg-rose-50",
-                isSelected && !revealed && "bg-cyan-50 ring-1 ring-inset ring-cyan-200",
+                isSelected && !revealed && "bg-cyan-100 ring-2 ring-inset ring-cyan-400",
+                isSelected && "font-bold",
               )}
             >
-              <span className="w-6 shrink-0 text-base font-bold text-slate-800">{opt.label}</span>
-              <span className="flex-1 text-slate-700">{opt.text}</span>
+              <span
+                className={cn(
+                  "w-6 shrink-0 text-base",
+                  isSelected ? "font-extrabold text-cyan-800" : "font-bold text-slate-800",
+                )}
+              >
+                {opt.label}
+              </span>
+              <span className={cn("flex-1", isSelected ? "font-bold text-cyan-950" : "text-slate-700")}>{opt.text}</span>
               {showCorrect && <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />}
               {showWrong && <XCircle className="size-4 shrink-0 text-rose-600" />}
             </button>

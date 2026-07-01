@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Play } from "lucide-react";
+import { ArrowLeft, Clock, Layers, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { MockTestFormatOverview } from "@/components/mock-test/MockTestFormatOverview";
@@ -35,8 +35,8 @@ export function MockTestIntroPage() {
 
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-slate-400">
-        <Loader2 className="size-5 animate-spin" />
+      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-white/50">
+        <Loader2 className="size-5 animate-spin text-cyan-400" />
         <span className="text-sm">Loading mock test…</span>
       </div>
     );
@@ -45,8 +45,8 @@ export function MockTestIntroPage() {
   if (!test) {
     return (
       <div className="mx-auto max-w-lg p-8 text-center">
-        <p className="font-medium text-slate-700">Mock test not found.</p>
-        <Link to={mockTestCatalogUrl()} className="mt-4 inline-block text-sm text-violet-600 hover:underline">
+        <p className="font-medium text-white/80">Mock test not found.</p>
+        <Link to={mockTestCatalogUrl()} className="mt-4 inline-block text-sm text-cyan-400 hover:underline">
           ← Back to mock tests
         </Link>
       </div>
@@ -54,55 +54,67 @@ export function MockTestIntroPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
-      <Link to={mockTestCatalogUrl()} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="size-4" />
-        All mock tests
-      </Link>
+    <div className="relative min-h-full p-4 md:p-6 lg:p-8">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute right-1/4 top-0 size-96 rounded-full bg-violet-600/8 blur-3xl" />
+      </div>
 
-      <header className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-6 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-widest text-violet-600">{MOCK_EXAM_TITLE} mock test</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">{test.title}</h1>
-        {test.description && <p className="mt-2 text-sm text-slate-600">{test.description}</p>}
+      <div className="relative mx-auto max-w-3xl space-y-6">
+        <Link
+          to={mockTestCatalogUrl()}
+          className="inline-flex items-center gap-1 text-sm text-white/50 transition-colors hover:text-white"
+        >
+          <ArrowLeft className="size-4" />
+          All mock tests
+        </Link>
 
-        <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-slate-500">Activity screens</dt>
-            <dd className="font-semibold text-slate-800">{MOCK_ACTIVITY_SCREENS} sections</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Total time</dt>
-            <dd className="font-semibold text-slate-800">
-              ~{Math.floor(MOCK_EXAM_TOTAL_MINUTES / 60)}h {MOCK_EXAM_TOTAL_MINUTES % 60}m
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Modules</dt>
-            <dd className="font-semibold text-slate-800">Listening · Reading · Writing · Speaking</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Order</dt>
-            <dd className="font-semibold text-slate-800">Listening → Reading → Writing → Speaking</dd>
-          </div>
-        </dl>
+        <header className="overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-blue-600/15 via-white/[0.04] to-violet-600/10 p-6 backdrop-blur-sm md:p-8">
+          <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">{MOCK_EXAM_TITLE} mock test</p>
+          <h1 className="mt-1 text-2xl font-bold text-white md:text-3xl">{test.title}</h1>
+          {test.description && <p className="mt-2 text-sm leading-relaxed text-white/55">{test.description}</p>}
 
-        <Button asChild className="mt-5 gap-2 bg-violet-600 hover:bg-violet-700">
-          <Link to={mockTestStepUrl(test.id, 1)} onClick={handleStart}>
-            <Play className="size-4" />
-            Start mock test
-          </Link>
-        </Button>
-      </header>
+          <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+            {[
+              { icon: Layers, label: "Activity screens", value: `${MOCK_ACTIVITY_SCREENS} sections` },
+              {
+                icon: Clock,
+                label: "Total time",
+                value: `~${Math.floor(MOCK_EXAM_TOTAL_MINUTES / 60)}h ${MOCK_EXAM_TOTAL_MINUTES % 60}m`,
+              },
+              { label: "Modules", value: "Listening · Reading · Writing · Speaking" },
+              { label: "Order", value: "Listening → Reading → Writing → Speaking" },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+              >
+                <dt className="text-xs uppercase tracking-wide text-white/40">{row.label}</dt>
+                <dd className="mt-0.5 font-semibold text-white">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
 
-      <MockTestFormatOverview />
+          <Button
+            asChild
+            className="mt-6 gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-900/30 hover:from-cyan-400 hover:to-blue-500"
+          >
+            <Link to={mockTestStepUrl(test.id, 1)} onClick={handleStart}>
+              <Play className="size-4" />
+              Start mock test
+            </Link>
+          </Button>
+        </header>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        <p className="font-semibold text-slate-800">Before you begin</p>
-        <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>Use headphones for Listening and Speaking.</li>
-          <li>Complete each section before moving to the next.</li>
-          <li>Writing and Speaking are AI-scored when you submit.</li>
-        </ul>
+        <MockTestFormatOverview variant="dark" />
+
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-4 text-sm text-amber-100/80">
+          <p className="font-semibold text-amber-200">Before you begin</p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-amber-100/65">
+            <li>Use headphones for Listening and Speaking.</li>
+            <li>Complete each section before moving to the next.</li>
+            <li>Your full score is calculated when you submit the last section.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

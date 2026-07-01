@@ -61,63 +61,62 @@ export function SpeakingQuestionPanel({
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm">
-          Question <span className="font-bold text-slate-900">{questionIndex}</span>
-          <span className="text-slate-400"> / </span>
-          <span className="font-medium text-slate-600">{totalSets}</span>
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="shrink-0 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 sm:text-xs">
+                Q <span className="font-bold text-slate-900">{questionIndex}</span>/{totalSets}
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize sm:text-xs",
+                  levelBadgeClass(question.level),
+                )}
+              >
+                {question.level}
+              </span>
+            </div>
+            <h3 className="text-sm font-bold leading-snug text-slate-900">{question.title}</h3>
+          </div>
+          <Bookmark className="size-3.5 shrink-0 text-slate-300" />
         </div>
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
-            levelBadgeClass(question.level),
-          )}
-        >
-          {question.level}
-        </span>
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap sm:text-sm">
+          {question.content}
+        </p>
+        {imageSrc && (
+          <img src={imageSrc} alt="" className="mt-1.5 max-h-16 w-full rounded-md object-contain" />
+        )}
       </div>
 
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-bold leading-snug text-slate-900">{question.title}</h3>
-        <Bookmark className="size-4 shrink-0 text-slate-300" />
+      {/* Examiner on top, your recording below — equal height, always visible */}
+      <div className="grid min-h-0 flex-1 grid-rows-2 gap-2">
+        <ExaminerAudioBox
+          key={`${question.id}-${attemptKey}-examiner`}
+          src={question.audio_url}
+          autoPlay
+          compact
+          className="min-h-0"
+          onPlayingChange={onExaminerPlaying}
+          onEnded={onStartPreparing}
+        />
+        <UserRecordingBox
+          phase={phase}
+          prepareSecondsLeft={prepareSecondsLeft}
+          recordSecondsLeft={recordSecondsLeft}
+          maxDuration={maxDuration}
+          audioStream={audioStream}
+          micReady={micReady}
+          micError={micError}
+          compact
+          className="min-h-0"
+          onStartRecording={onStartRecording}
+          onRecordingComplete={onRecordingComplete}
+          onRetryMic={onRetryMic}
+          onRegisterStop={onRegisterRecordingStop}
+        />
       </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700 shadow-sm whitespace-pre-wrap">
-        {question.content}
-      </div>
-
-      {imageSrc && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <img
-            src={imageSrc}
-            alt=""
-            className="mx-auto max-h-40 w-full rounded-lg object-contain"
-          />
-        </div>
-      )}
-
-      <ExaminerAudioBox
-        key={`${question.id}-${attemptKey}`}
-        src={question.audio_url}
-        autoPlay
-        onPlayingChange={onExaminerPlaying}
-        onEnded={onStartPreparing}
-      />
-
-      <UserRecordingBox
-        phase={phase}
-        prepareSecondsLeft={prepareSecondsLeft}
-        recordSecondsLeft={recordSecondsLeft}
-        maxDuration={maxDuration}
-        audioStream={audioStream}
-        micReady={micReady}
-        micError={micError}
-        onStartRecording={onStartRecording}
-        onRecordingComplete={onRecordingComplete}
-        onRetryMic={onRetryMic}
-        onRegisterStop={onRegisterRecordingStop}
-      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { AdminQuestionLogsPage } from "@/pages/admin/AdminQuestionLogsPage";
 import { AdminQAAnalyticsPage } from "@/pages/admin/AdminQAAnalyticsPage";
 import { AdminBulkImportPage } from "@/pages/admin/AdminBulkImportPage";
 import { MockTestCatalogPage } from "@/pages/MockTestCatalogPage";
+import { MockTestPreviousResultsPage } from "@/pages/MockTestPreviousResultsPage";
 import { MockTestIntroPage } from "@/pages/MockTestIntroPage";
 import { MockTestWorkspacePage } from "@/pages/MockTestWorkspacePage";
 import { MockTestResultsPage } from "@/pages/MockTestResultsPage";
@@ -98,6 +99,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/mock-tests" element={<MockTestCatalogPage />} />
+            <Route path="/mock-tests/previous-results" element={<MockTestPreviousResultsPage />} />
             <Route path="/mock-test/:testId" element={<MockTestIntroPage />} />
             <Route path="/mock-test/:testId/results" element={<MockTestResultsPage />} />
             <Route path="/practice" element={<PracticeHomePage />} />

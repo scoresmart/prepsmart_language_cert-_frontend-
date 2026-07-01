@@ -34,6 +34,19 @@ export const SPEAKING_PART_TITLES: Record<string, string> = {
   "4": "Presentation",
 };
 
+/** Short badges shown on attempt cards (e.g. RA for Read Aloud). */
+export const SPEAKING_PART_ABBREV: Record<string, string> = {
+  "1": "Q",
+  "2": "RP",
+  "3": "RA",
+  "4": "PR",
+};
+
+export function speakingPartFromQuestionType(questionType: string): string | null {
+  const match = /speaking_part_(\d+)/i.exec(questionType);
+  return match?.[1] ?? null;
+}
+
 /** Task focus per part — LanguageCert Academic */
 export const SPEAKING_PART_FOCUS: Record<string, string> = {
   "1":

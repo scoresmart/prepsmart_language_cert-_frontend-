@@ -47,7 +47,13 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     throw new Error(`Invalid API response (${res.status}) from ${BASE_URL}${path}`);
   }
 
-  if (!res.ok) throw new Error(json.message || "Request failed");
+  if (!res.ok) {
+    const msg = json.message || "Request failed";
+    if (res.status === 401) {
+      throw new Error(msg.includes("Authentication") ? "Authentication required — please sign in again." : msg);
+    }
+    throw new Error(msg);
+  }
   return json as T;
 }
 
@@ -82,7 +88,13 @@ async function requestForm<T = unknown>(path: string, formData: FormData): Promi
     throw new Error(`Invalid API response (${res.status}) from ${BASE_URL}${path}`);
   }
 
-  if (!res.ok) throw new Error(json.message || "Request failed");
+  if (!res.ok) {
+    const msg = json.message || "Request failed";
+    if (res.status === 401) {
+      throw new Error(msg.includes("Authentication") ? "Authentication required — please sign in again." : msg);
+    }
+    throw new Error(msg);
+  }
   return json as T;
 }
 

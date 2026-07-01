@@ -4,11 +4,9 @@ import {
   BookOpen,
   ChevronDown,
   Crown,
-  HelpCircle,
   Home,
   LayoutDashboard,
   LogOut,
-  Phone,
   Settings,
   Shield,
   FlaskConical,
@@ -50,8 +48,6 @@ const mainNav: NavItem[] = [
 
 const bottomNav: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings },
-  { to: "/attempts", label: "Help (Q&A)", icon: HelpCircle },
-  { to: "/subscription", label: "Contact Us", icon: Phone },
   { to: "/subscription", label: "Terms & Conditions", icon: Shield },
 ];
 
@@ -237,8 +233,7 @@ export function AppShell() {
           <Link to="/dashboard" className="flex shrink-0 items-center gap-2 transition-transform hover:scale-105">
             <img src="/logo.png" alt="PrepSmart LC" className="size-8 object-contain" />
             <span className="hidden font-bold tracking-wide text-white sm:inline">
-              PREP<span className="text-cyan-400">SMART</span>{" "}
-              <span className="text-cyan-400">LC</span>
+              PREPSMART LC
             </span>
           </Link>
 

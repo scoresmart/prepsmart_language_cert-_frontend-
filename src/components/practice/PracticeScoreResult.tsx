@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2, Trophy } from "lucide-react";
+import { AlertCircle, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PracticeGrade, ScoringPhase, SpeakingScoreResult, WritingScoreResult } from "@/lib/scoringTypes";
 import { WritingErrorsPanel } from "@/components/practice/writing/WritingErrorsPanel";
@@ -7,7 +7,7 @@ function formatScoringError(error?: string | null): string {
   if (!error) return "Please try again in a moment.";
   const creditMatch = error.match(/credit balance is too low/i);
   if (creditMatch) {
-    return "AI scoring is unavailable — Anthropic API credits are exhausted. Ask your admin to add credits at console.anthropic.com → Plans & Billing.";
+    return "Scoring is temporarily unavailable. Please try again later or contact support.";
   }
   const jsonStart = error.indexOf("{");
   if (jsonStart >= 0) {
@@ -60,17 +60,7 @@ export function PracticeScoreResult({
   if (phase === "idle") return null;
 
   if (phase === "scoring") {
-    return (
-      <div className={cn("flex flex-col items-center justify-center rounded-xl border border-violet-200 bg-violet-50/80 px-6 py-10 text-center", className)}>
-        <Loader2 className="size-8 animate-spin text-violet-600" />
-        <p className="mt-4 text-sm font-semibold text-violet-900">Calculating your score…</p>
-        <p className="mt-1 text-xs text-violet-700/80">
-          {speaking !== undefined
-            ? "Saving your recording, transcribing with Azure, then grading with AI."
-            : "Grading your writing with AI."}
-        </p>
-      </div>
-    );
+    return null;
   }
 
   if (phase === "error") {
@@ -99,7 +89,6 @@ export function PracticeScoreResult({
           <Trophy className="size-5 text-violet-700" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Your result</p>
           <p className="text-lg font-bold text-slate-900">Score {scoreDisplay}</p>
         </div>
         <span className={cn("rounded-full border px-3 py-1 text-xs font-bold", gradeStyles(grade))}>

@@ -56,7 +56,7 @@ export function SpeakingSidebarPanel() {
       prepareSecondsLeft={ctx.prepareSecondsLeft}
       recordSecondsLeft={ctx.recordSecondsLeft}
       maxDuration={ctx.maxDuration}
-      className="hidden md:flex"
+      className="h-full w-full"
     />
   );
 }

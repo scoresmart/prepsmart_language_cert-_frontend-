@@ -2,18 +2,16 @@ import * as React from "react";
 
 import { useQuery } from "@tanstack/react-query";
 
-import { Loader2, RotateCcw, Send } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 import { api } from "@/lib/api";
-
-import { PRACTICE_TIPS } from "@/lib/practiceTips";
 
 import { saveLocalRecording, getLocalRecording } from "@/lib/practiceAttemptStorage";
 import { normalizeCefrLevel } from "@/lib/normalizeCefrLevel";
 import { convertBlobToWav16kMono } from "@/lib/convertRecordingToWav";
-import { notifyMockTestScoreFromAttempt, notifyMockSpeakingAiScore } from "@/lib/mockTestRecorder";
+import { notifyMockTestScoreFromAttempt, notifyMockSpeakingAiScore, completeMockSectionSubmit, isMockDeferScoring } from "@/lib/mockTestRecorder";
+import { MockSectionSavedNotice } from "@/components/mock-test/MockSectionSavedNotice";
+import { useMockTestRunOptional } from "@/providers/MockTestRunContext";
 import {
   isMicrophoneStreamActive,
   microphoneErrorMessage,
@@ -33,13 +31,12 @@ import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
 
 import { SpeakingPracticeShell } from "@/components/practice/speaking/SpeakingPracticeShell";
 
-import { useSpeakingPracticeStateOptional } from "@/components/practice/speaking/SpeakingPracticeContext";
+import { useSpeakingPracticeStateOptional, SpeakingSidebarPanel } from "@/components/practice/speaking/SpeakingPracticeContext";
 
 import { SpeakingQuestionPanel } from "@/components/practice/speaking/SpeakingQuestionPanel";
 
-import { SpeakingSidebar } from "@/components/practice/speaking/SpeakingSidebar";
-
-import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
+import { PracticeScoringDialog } from "@/components/practice/PracticeScoringDialog";
+import { PracticeTaskFooterActions } from "@/components/practice/PracticeActionButtons";
 import { useSubmitLock } from "@/hooks/useSubmitLock";
 
 import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
@@ -162,6 +159,8 @@ function SpeakingRunner({
   const [micError, setMicError] = React.useState<string | null>(null);
 
   const { isSubmitting, runSubmit } = useSubmitLock();
+  const mockRun = useMockTestRunOptional();
+  const deferResults = isMockDeferScoring();
 
   const [submitted, setSubmitted] = React.useState(false);
 
@@ -175,6 +174,7 @@ function SpeakingRunner({
 
   const scoringInFlightRef = React.useRef(false);
   const stopRecordingRef = React.useRef<(() => void) | null>(null);
+  const [scoringDialogOpen, setScoringDialogOpen] = React.useState(false);
 
   const speakingPractice = useSpeakingPracticeStateOptional();
 
@@ -280,6 +280,8 @@ function SpeakingRunner({
 
     setScoringError(null);
 
+    setScoringDialogOpen(false);
+
     setRecordingUrl(null);
 
     scoringInFlightRef.current = false;
@@ -290,7 +292,11 @@ function SpeakingRunner({
 
   }, [question?.id, attemptKey, stopMic, partTiming.prepSeconds, partTiming.recordSeconds]);
 
-
+  React.useEffect(() => {
+    if (submitted && !deferResults && scoringPhase !== "idle") {
+      setScoringDialogOpen(true);
+    }
+  }, [submitted, deferResults, scoringPhase]);
 
   React.useEffect(() => () => stopMic(), [stopMic]);
 
@@ -383,6 +389,23 @@ function SpeakingRunner({
       await saveLocalRecording(question.id, blob);
       const playback = await getLocalRecording(question.id);
       setRecordingUrl(playback);
+
+      const deferred = await completeMockSectionSubmit({
+        kind: "speaking",
+        questionType: `speaking_part_${part}`,
+        questionSetId: question.id,
+        part,
+        level: question.level,
+        title: question.title,
+        content: question.content,
+        recordingQuestionId: question.id,
+      });
+      if (deferred) {
+        setSubmitted(true);
+        setScoringPhase("done");
+        scoringInFlightRef.current = false;
+        return;
+      }
 
       let uploadBlob: Blob;
       try {
@@ -477,32 +500,42 @@ function SpeakingRunner({
 
 
 
+  const footerTop =
+    submitted && deferResults ? (
+      <div className="mb-2 w-full">
+        <MockSectionSavedNotice isLastStep={mockRun?.isLastStep} />
+      </div>
+    ) : null;
+
+  const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob);
+
   const footer = (
-    <div className="flex flex-wrap items-center gap-2">
-      {phase === "recorded" && !submitted && recordingBlob && (
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="gap-2 bg-violet-600 hover:bg-violet-700"
-        >
-          <Send className="size-4" />
-          {isSubmitting ? "Submitting…" : "Submit for scoring"}
-        </Button>
-      )}
-      {submitted && scoringPhase === "scoring" && (
-        <span className="text-sm font-medium text-violet-700">Saving recording and calculating score…</span>
-      )}
-      <Button type="button" variant="outline" onClick={() => { onRetry(); }} className="gap-2">
-        <RotateCcw className="size-4" />
-        Re-do
-      </Button>
-    </div>
+    <PracticeTaskFooterActions
+      canSubmit={canSubmit}
+      isSubmitting={isSubmitting}
+      submitted={submitted}
+      deferResults={deferResults}
+      isLastStep={mockRun?.isLastStep}
+      onSubmit={handleSubmit}
+      onRedo={() => onRetry()}
+      submitVariant="submit"
+    />
   );
 
 
 
   return (
+
+    <>
+
+    <PracticeScoringDialog
+      open={scoringDialogOpen}
+      onOpenChange={setScoringDialogOpen}
+      phase={scoringPhase}
+      error={scoringError}
+      speaking={speakingScore}
+      recordingUrl={recordingUrl}
+    />
 
     <SpeakingPracticeShell
 
@@ -520,107 +553,43 @@ function SpeakingRunner({
 
       footer={footer}
 
+      footerTop={footerTop}
+
+      sidebar={<SpeakingSidebarPanel />}
+
     >
 
       <SpeakingQuestionPanel
-
         question={question}
-
         questionIndex={questionIndex}
-
         totalSets={totalSets}
-
         attemptKey={attemptKey}
-
         phase={phase}
-
         prepareSecondsLeft={prepareLeft}
-
         recordSecondsLeft={recordLeft}
-
         maxDuration={partTiming.recordSeconds}
-
         audioStream={micStream}
-
         micReady={micReady}
-
         micError={micError}
-
         onStartPreparing={startPreparing}
-
         onStartRecording={() => {
-
           void handleStartRecording();
-
         }}
-
         onRecordingComplete={handleRecordingComplete}
-
         onRetryMic={() => {
-
           void ensureMicAccess();
-
         }}
-
         onExaminerPlaying={(playing) => {
-
           if (playing) void ensureMicAccess();
-
         }}
-
         onRegisterRecordingStop={(stop) => {
-
           stopRecordingRef.current = stop;
-
         }}
-
       />
 
-
-
-      {submitted && (
-
-        <div className="mx-auto mt-4 w-full max-w-3xl px-1">
-
-          <PracticeScoreResult
-
-            phase={scoringPhase}
-
-            error={scoringError}
-
-            speaking={speakingScore}
-
-            recordingUrl={recordingUrl}
-
-          />
-
-        </div>
-
-      )}
-
-
-
-      <div className="mx-auto w-full max-w-3xl md:hidden">
-
-        <SpeakingSidebar
-
-          tips={PRACTICE_TIPS.speaking}
-
-          phase={phase}
-
-          prepareSecondsLeft={prepareLeft}
-
-          recordSecondsLeft={recordLeft}
-
-          maxDuration={partTiming.recordSeconds}
-
-          className="mt-2 rounded-xl border border-slate-200"
-
-        />
-
-      </div>
-
     </SpeakingPracticeShell>
+
+    </>
 
   );
 

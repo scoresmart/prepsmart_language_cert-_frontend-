@@ -4,6 +4,10 @@ export function mockTestCatalogUrl() {
   return "/mock-tests";
 }
 
+export function mockTestPreviousResultsUrl() {
+  return "/mock-tests/previous-results";
+}
+
 export function mockTestIntroUrl(testId: string) {
   return `/mock-test/${testId}`;
 }

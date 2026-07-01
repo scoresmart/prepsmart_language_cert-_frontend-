@@ -1,14 +1,14 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronDown, Sparkles, X } from "lucide-react";
+import { ChevronDown, Sparkles, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LC_SECTIONS } from "@/lib/lcPracticeMenu";
 import { moduleUrl } from "@/lib/practiceRoutes";
 
 type Props = {
   align?: "left" | "center" | "right";
-  triggerVariant?: "nav" | "cta";
+  triggerVariant?: "nav" | "cta" | "workspace";
   className?: string;
 };
 
@@ -134,12 +134,19 @@ export function LCPracticeDropdown({ align = "center", triggerVariant = "nav", c
           "group relative flex items-center gap-2 overflow-hidden rounded-full bg-white px-6 py-2.5 text-sm font-bold text-emerald-800 shadow-lg shadow-black/20 transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95",
           isOpen && "ring-2 ring-emerald-400/80 ring-offset-2 ring-offset-emerald-700",
         )
-      : cn(
-          "group relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-300",
-          isOpen
-            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/40 scale-105"
-            : "text-white/80 hover:bg-white/10 hover:text-white hover:scale-105",
-        );
+      : triggerVariant === "workspace"
+        ? cn(
+            "group relative flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-all duration-200",
+            isOpen
+              ? "bg-slate-100 text-slate-900"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+          )
+        : cn(
+            "group relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-300",
+            isOpen
+              ? "bg-blue-600 text-white shadow-lg shadow-blue-600/40 scale-105"
+              : "text-white/80 hover:bg-white/10 hover:text-white hover:scale-105",
+          );
 
   const menu = (
     <div
@@ -237,6 +244,7 @@ export function LCPracticeDropdown({ align = "center", triggerVariant = "nav", c
           {triggerVariant === "cta" && (
             <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
           )}
+          {triggerVariant === "workspace" && <ArrowLeft className="relative size-4 shrink-0" />}
           <span className="relative">LC Practice</span>
           <ChevronDown
             className={cn("relative size-4 transition-transform duration-300", isOpen && "rotate-180")}

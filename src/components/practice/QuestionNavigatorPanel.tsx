@@ -1,8 +1,11 @@
 import * as React from "react";
-import { CheckCircle2, Circle, Search, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { difficultyLabel } from "@/lib/practiceNavigation";
 import type { PracticeQuestionItem } from "@/lib/practiceQuestions";
+
+type StatusFilter = "all" | "done" | "todo";
+type DifficultyFilter = "all" | "Easy" | "Medium" | "Hard";
 
 type Props = {
   open: boolean;
@@ -26,8 +29,8 @@ export function QuestionNavigatorPanel({
   onSelect,
 }: Props) {
   const [search, setSearch] = React.useState("");
-  const [difficultyFilter, setDifficultyFilter] = React.useState<"all" | "Easy" | "Medium" | "Hard">("all");
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "done" | "todo">("all");
+  const [difficultyFilter, setDifficultyFilter] = React.useState<DifficultyFilter>("all");
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
 
   const doneCount = questions.filter((q) => completedIds.has(q.id)).length;
 
@@ -88,30 +91,27 @@ export function QuestionNavigatorPanel({
             />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-3 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-emerald-500" /> Practiced
-              </span>
-              <span className="flex items-center gap-1">
-                <Circle className="size-3.5 text-amber-400" /> Pending
-              </span>
-            </div>
-            <FilterPill
-              label={statusFilter === "all" ? "All" : statusFilter === "done" ? "Practiced" : "Pending"}
-              active={statusFilter !== "all"}
-              onClick={() =>
-                setStatusFilter((s) => (s === "all" ? "todo" : s === "todo" ? "done" : "all"))
-              }
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <NavigatorFilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v as StatusFilter)}
+              options={[
+                { value: "all", label: "All questions" },
+                { value: "done", label: "Practiced" },
+                { value: "todo", label: "Pending" },
+              ]}
             />
-            <FilterPill
-              label={difficultyFilter === "all" ? "Difficulty" : difficultyFilter}
-              active={difficultyFilter !== "all"}
-              onClick={() =>
-                setDifficultyFilter((d) =>
-                  d === "all" ? "Easy" : d === "Easy" ? "Medium" : d === "Medium" ? "Hard" : "all",
-                )
-              }
+            <NavigatorFilterSelect
+              label="Difficulty"
+              value={difficultyFilter}
+              onChange={(v) => setDifficultyFilter(v as DifficultyFilter)}
+              options={[
+                { value: "all", label: "All levels" },
+                { value: "Easy", label: "Easy" },
+                { value: "Medium", label: "Medium" },
+                { value: "Hard", label: "Hard" },
+              ]}
             />
           </div>
         </header>
@@ -169,27 +169,36 @@ export function QuestionNavigatorPanel({
   );
 }
 
-function FilterPill({
+function NavigatorFilterSelect({
   label,
-  active,
-  onClick,
+  value,
+  onChange,
+  options,
 }: {
   label: string;
-  active: boolean;
-  onClick: () => void;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1 text-xs font-medium transition",
-        active
-          ? "border-cyan-500 bg-cyan-50 text-cyan-800"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
-      )}
-    >
-      {label}
-    </button>
+    <label className="block min-w-0">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+      </div>
+    </label>
   );
 }

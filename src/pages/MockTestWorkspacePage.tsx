@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
 import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
 import { MockTestWorkspaceBar } from "@/components/mock-test/MockTestWorkspaceBar";
-import {
-  SpeakingPracticeProvider,
-  SpeakingSidebarPanel,
-} from "@/components/practice/speaking/SpeakingPracticeContext";
+import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { api } from "@/lib/api";
 import { MOCK_TEST_STEPS, READING_STEP_TO_PART_TYPE } from "@/lib/mockTestFormat";
 import { setMockTestContext } from "@/lib/mockTestRecorder";
+import { MockTestRunProvider } from "@/providers/MockTestRunContext";
 import {
   mockTestCatalogUrl,
   mockTestResultsUrl,
@@ -126,11 +124,14 @@ export function MockTestWorkspacePage() {
   };
 
   const questionFrameClass =
-    step.module === "speaking" || (step.module === "writing" && step.part === "1")
-      ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
-      : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+    step.module === "speaking"
+      ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      : step.module === "writing" && step.part === "1"
+        ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
+        : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
 
   return (
+    <MockTestRunProvider testId={testId} sectionKey={step.key} stepIndex={stepIndex}>
     <PracticeWorkspaceLayout>
       <MockTestWorkspaceBar
         testTitle={testTitle}
@@ -138,7 +139,7 @@ export function MockTestWorkspacePage() {
         stepLabel={step.label}
       />
 
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2">
+      <div className="flex h-full min-h-0 shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:px-4">
         <Button
           type="button"
           variant="outline"
@@ -151,15 +152,7 @@ export function MockTestWorkspacePage() {
           Previous section
         </Button>
         {stepIndex >= MOCK_TEST_STEPS.length ? (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1 bg-violet-600 hover:bg-violet-700"
-            onClick={() => navigate(mockTestResultsUrl(testId))}
-          >
-            View results
-            <ChevronRight className="size-4" />
-          </Button>
+          <p className="text-xs text-slate-500">Submit the last section to calculate your score.</p>
         ) : (
           <Button
             type="button"
@@ -179,7 +172,13 @@ export function MockTestWorkspacePage() {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div
+                className={
+                  step.module === "speaking"
+                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                    : "min-h-0 flex-1 overflow-y-auto"
+                }
+              >
                 {missingConfigured ? (
                   <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
                     <p className="text-lg font-semibold text-slate-800">{step.label} not configured</p>
@@ -243,11 +242,10 @@ export function MockTestWorkspacePage() {
                 )}
               </div>
             </div>
-
-            {step.module === "speaking" && <SpeakingSidebarPanel />}
           </div>
         </div>
       </SpeakingPracticeProvider>
     </PracticeWorkspaceLayout>
+    </MockTestRunProvider>
   );
 }

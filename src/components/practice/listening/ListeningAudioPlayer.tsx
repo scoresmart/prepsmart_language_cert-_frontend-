@@ -24,6 +24,29 @@ export function ListeningAudioPlayer({
   const [prepLeft, setPrepLeft] = React.useState(prepSeconds);
   const [volume, setVolume] = React.useState(1);
 
+  const startPlaybackWhenReady = React.useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+
+    const playNow = () => {
+      setPhase("playing");
+      void el.play().catch(() => setPhase("paused"));
+    };
+
+    if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      playNow();
+      return;
+    }
+
+    const onReady = () => playNow();
+    el.addEventListener("canplay", onReady, { once: true });
+    if (el.networkState === HTMLMediaElement.NETWORK_EMPTY) {
+      el.load();
+    }
+
+    return () => el.removeEventListener("canplay", onReady);
+  }, []);
+
   React.useEffect(() => {
     setPhase("preparing");
     setPrepLeft(prepSeconds);
@@ -31,21 +54,19 @@ export function ListeningAudioPlayer({
     if (el) {
       el.pause();
       el.currentTime = 0;
+      el.load();
     }
   }, [src, prepSeconds, resetKey]);
 
   React.useEffect(() => {
     if (phase !== "preparing") return;
     if (prepLeft <= 0) {
-      const el = audioRef.current;
-      if (!el) return;
-      setPhase("playing");
-      void el.play().catch(() => setPhase("paused"));
-      return;
+      const cleanup = startPlaybackWhenReady();
+      return cleanup;
     }
     const timer = window.setTimeout(() => setPrepLeft((s) => s - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [phase, prepLeft]);
+  }, [phase, prepLeft, startPlaybackWhenReady]);
 
   const toggle = () => {
     const el = audioRef.current;
@@ -64,6 +85,7 @@ export function ListeningAudioPlayer({
   return (
     <div className={cn("flex flex-col items-center gap-3 py-5", className)}>
       <audio
+        key={`${src}-${resetKey}`}
         ref={audioRef}
         src={src}
         preload="auto"

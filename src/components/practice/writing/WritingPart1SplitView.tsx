@@ -1,7 +1,7 @@
 import { BarChart3, CheckCircle2, FileText, PenLine, RotateCcw } from "lucide-react";
 import * as React from "react";
+import { PracticeSubmitButton } from "@/components/practice/PracticeActionButtons";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { WritingRichEditor } from "@/components/practice/writing/WritingRichEditor";
 import { WritingWordCountBar } from "@/components/practice/writing/WritingWordCountBar";
 
@@ -196,16 +196,13 @@ export function WritingPart1Footer({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <WritingWordCountBar count={wordCount} min={minWords} max={maxWords} />
-      <Button
+      <PracticeSubmitButton
         onClick={onSubmit}
         disabled={!canSubmit || submitting}
-        className={cn(
-          "shrink-0 gap-2 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600",
-          "w-full sm:w-auto sm:min-w-[160px]",
-        )}
+        className="w-full shrink-0 sm:w-auto sm:min-w-[160px]"
       >
         {submitting ? "Submitting…" : "Submit answer"}
-      </Button>
+      </PracticeSubmitButton>
     </div>
   );
 }

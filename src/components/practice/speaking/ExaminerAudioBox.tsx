@@ -9,6 +9,7 @@ type Props = {
   onEnded?: () => void;
   onPlayingChange?: (playing: boolean) => void;
   className?: string;
+  compact?: boolean;
 };
 
 export function ExaminerAudioBox({
@@ -17,6 +18,7 @@ export function ExaminerAudioBox({
   onEnded,
   onPlayingChange,
   className,
+  compact = false,
 }: Props) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = React.useState(false);
@@ -37,7 +39,6 @@ export function ExaminerAudioBox({
     const el = audioRef.current;
     if (!el) return;
 
-    // Don't restart if user switched browser tabs and audio was already playing/finished.
     if (!el.paused && el.currentTime > 0) return;
     if (el.ended) return;
 
@@ -49,8 +50,14 @@ export function ExaminerAudioBox({
 
   if (!src) {
     return (
-      <div className={cn("rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center", className)}>
-        <p className="text-sm text-slate-400">No examiner audio for this question.</p>
+      <div
+        className={cn(
+          "flex h-full min-h-0 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center",
+          compact ? "px-3 py-4" : "px-6 py-10",
+          className,
+        )}
+      >
+        <p className="text-xs text-slate-400 sm:text-sm">No examiner audio for this question.</p>
       </div>
     );
   }
@@ -58,7 +65,8 @@ export function ExaminerAudioBox({
   return (
     <div
       className={cn(
-        "rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white px-6 py-8 text-center shadow-sm",
+        "flex h-full min-h-0 flex-col items-center justify-center rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white text-center shadow-sm",
+        compact ? "px-3 py-2 sm:px-4 sm:py-3" : "px-6 py-8",
         playing && "border-cyan-200 ring-1 ring-cyan-100",
         className,
       )}
@@ -76,19 +84,26 @@ export function ExaminerAudioBox({
           onEnded?.();
         }}
       />
-      <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-cyan-100 text-cyan-700">
-        <Headphones className="size-7" />
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-full bg-cyan-100 text-cyan-700",
+          compact ? "size-9 sm:size-10" : "size-14",
+        )}
+      >
+        <Headphones className={compact ? "size-4 sm:size-5" : "size-7"} />
       </div>
-      <p className="mt-4 text-sm font-semibold text-slate-800">
+      <p className={cn("font-semibold text-slate-800", compact ? "mt-2 text-xs sm:text-sm" : "mt-4 text-sm")}>
         {playing ? "Examiner is speaking" : ended ? "Examiner finished" : "Listen to the examiner"}
       </p>
-      <p className="mt-1 text-xs text-slate-500">Please listen carefully before you record your answer.</p>
-      <AudioWaveBars active={playing} className="mt-5" colorClass="bg-cyan-500" />
+      {!compact && (
+        <p className="mt-1 text-xs text-slate-500">Please listen carefully before you record your answer.</p>
+      )}
+      <AudioWaveBars active={playing} compact={compact} className={compact ? "mt-2" : "mt-5"} colorClass="bg-cyan-500" />
       {!playing && !ended && (
         <button
           type="button"
           onClick={() => void audioRef.current?.play()}
-          className="mt-4 text-xs font-medium text-cyan-700 hover:text-cyan-900"
+          className={cn("font-medium text-cyan-700 hover:text-cyan-900", compact ? "mt-1.5 text-[10px] sm:text-xs" : "mt-4 text-xs")}
         >
           Play examiner audio
         </button>

@@ -52,6 +52,22 @@ export async function saveLocalRecording(questionSetId: string, blob: Blob): Pro
   }
 }
 
+export async function getLocalRecordingBlob(questionSetId: string): Promise<Blob | null> {
+  try {
+    const db = await openRecordingDb();
+    const blob = await new Promise<Blob | undefined>((resolve, reject) => {
+      const tx = db.transaction(RECORDING_STORE, "readonly");
+      const req = tx.objectStore(RECORDING_STORE).get(questionSetId);
+      req.onsuccess = () => resolve(req.result as Blob | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return blob ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getLocalRecording(questionSetId: string): Promise<string | null> {
   const cached = recordingUrlCache.get(questionSetId);
   if (cached) return cached;

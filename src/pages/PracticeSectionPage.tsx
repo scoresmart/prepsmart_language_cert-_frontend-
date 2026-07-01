@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type WritingQuestion, type ListeningQuestion, type ReadingQuestion } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { PracticeScoringDialog } from "@/components/practice/PracticeScoringDialog";
+import { PracticeTaskFooterActions } from "@/components/practice/PracticeActionButtons";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Loader2, RotateCcw,
+  Loader2,
   Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,15 +22,22 @@ import { ReadingStatementSelect } from "@/components/practice/reading/ReadingTex
 import { WritingPracticeShell } from "@/components/practice/writing/WritingPracticeShell";
 import {
   WritingPart1AnswerPanel,
-  WritingPart1Footer,
   WritingPart1TaskPanel,
 } from "@/components/practice/writing/WritingPart1SplitView";
+import { WritingWordCountBar } from "@/components/practice/writing/WritingWordCountBar";
 import { WritingRichEditor } from "@/components/practice/writing/WritingRichEditor";
 import { WRITING_WORD_LIMITS } from "@/lib/writingInstructions";
+import {
+  normalizeListeningPart3Data,
+  normalizeListeningPart4Data,
+} from "@/lib/listeningQuestionData";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
 import { notifyMockTestScoreFromAttempt, notifyMockWritingAiScore } from "@/lib/mockTestRecorder";
-import { useSubmitAnswers, useSubmitLock } from "@/hooks/useSubmitLock";
-import { PracticeScoreResult } from "@/components/practice/PracticeScoreResult";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
+import { useMockDeferredPracticeSubmit, mockShowAnswers } from "@/hooks/useMockDeferredPracticeSubmit";
+import { MockSectionSavedNotice } from "@/components/mock-test/MockSectionSavedNotice";
+import { completeMockSectionSubmit, isMockDeferScoring } from "@/lib/mockTestRecorder";
+import { useMockTestRunOptional } from "@/providers/MockTestRunContext";
 import { DEFAULT_WRITING_LEVEL, type ScoringPhase, type WritingScoreResult } from "@/lib/scoringTypes";
 
 type AttemptBody = {
@@ -61,9 +69,11 @@ function getImageUrl(f?: string | null): string | null {
 }
 
 function getAudioUrl(f?: string | null): string | null {
-  if (!f) return null;
-  if (f.startsWith("http")) return f;
-  return `${SUPABASE_URL}/storage/v1/object/public/listening-audio/${f}`;
+  if (!f?.trim()) return null;
+  const trimmed = f.trim();
+  if (trimmed.startsWith("http")) return trimmed;
+  const path = trimmed.replace(/^legacy-listening\//, "");
+  return `${SUPABASE_URL}/storage/v1/object/public/listening-audio/${path}`;
 }
 
 function parseJson<T>(s: string | null | undefined): T | null {
@@ -94,11 +104,63 @@ function EmptyState({ label }: { label: string }) {
 interface ResultsScreenProps {
   score: number;
   total: number;
-  onRetry: () => void;
   children?: React.ReactNode;
 }
 
-function ResultsScreen({ score, total, onRetry, children }: ResultsScreenProps) {
+function SectionOutcome({
+  revealed,
+  deferResults,
+  score,
+  total,
+}: {
+  revealed: boolean;
+  deferResults: boolean;
+  isLastStep: boolean;
+  score: number;
+  total: number;
+  onRetry: () => void;
+}) {
+  if (!revealed) return null;
+  if (deferResults) return null;
+  return <ResultsScreen score={score} total={total} />;
+}
+
+function practiceFooterTop(submitted: boolean, deferResults: boolean, isLastStep: boolean) {
+  if (!submitted || !deferResults) return undefined;
+  return (
+    <div className="mb-2 w-full">
+      <MockSectionSavedNotice isLastStep={isLastStep} />
+    </div>
+  );
+}
+
+function practiceTaskFooter(p: {
+  canSubmit: boolean;
+  isSubmitting: boolean;
+  submitted: boolean;
+  deferResults: boolean;
+  isLastStep: boolean;
+  onSubmit: () => void;
+  onRedo: () => void;
+  submitVariant?: "answers" | "answer" | "submit";
+  enabled?: boolean;
+}) {
+  if (p.enabled === false) return undefined;
+  return (
+    <PracticeTaskFooterActions
+      canSubmit={p.canSubmit}
+      isSubmitting={p.isSubmitting}
+      submitted={p.submitted}
+      deferResults={p.deferResults}
+      isLastStep={p.isLastStep}
+      onSubmit={p.onSubmit}
+      onRedo={p.onRedo}
+      submitVariant={p.submitVariant}
+    />
+  );
+}
+
+function ResultsScreen({ score, total, children }: ResultsScreenProps) {
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const colour = pct >= 70 ? "text-green-600" : pct >= 50 ? "text-amber-600" : "text-red-600";
 
@@ -112,9 +174,6 @@ function ResultsScreen({ score, total, onRetry, children }: ResultsScreenProps) 
           <p className="text-sm text-slate-500">
             {pct >= 70 ? "Great work!" : pct >= 50 ? "Good effort — keep practising!" : "Keep going — practice makes perfect!"}
           </p>
-          <Button onClick={onRetry} variant="outline" className="mt-2 gap-2">
-            <RotateCcw className="size-4" /> Try Another Set
-          </Button>
         </CardContent>
       </Card>
       {children}
@@ -156,7 +215,10 @@ export function WritingRunner({
   const [scoringPhase, setScoringPhase] = React.useState<ScoringPhase>("idle");
   const [writingScore, setWritingScore] = React.useState<WritingScoreResult | null>(null);
   const [scoringError, setScoringError] = React.useState<string | null>(null);
+  const [scoringDialogOpen, setScoringDialogOpen] = React.useState(false);
   const { isSubmitting, runSubmit } = useSubmitLock();
+  const mockRun = useMockTestRunOptional();
+  const deferResults = isMockDeferScoring();
 
   const q = useQuery({
     queryKey: ["practice", "writing", taskType],
@@ -176,16 +238,37 @@ export function WritingRunner({
     setScoringPhase("idle");
     setWritingScore(null);
     setScoringError(null);
+    setScoringDialogOpen(false);
   }, [questionIndex, attemptKey, question?.id]);
+
+  React.useEffect(() => {
+    if (submitted && !deferResults && scoringPhase !== "idle") {
+      setScoringDialogOpen(true);
+    }
+  }, [submitted, deferResults, scoringPhase]);
 
   const handleSubmit = () => {
     if (!question || submitted) return;
     void runSubmit(async () => {
+      saveLocalAnswer(question.id, text);
+
+      const deferred = await completeMockSectionSubmit({
+        kind: "writing",
+        questionType: `writing_${taskType}`,
+        questionSetId: question.id,
+        taskType: taskType as "task1" | "task2",
+        text,
+        questionText: question.question_text,
+      });
+      if (deferred) {
+        setSubmitted(true);
+        return;
+      }
+
       setSubmitted(true);
       setScoringPhase("scoring");
       setWritingScore(null);
       setScoringError(null);
-      saveLocalAnswer(question.id, text);
 
       const attemptId = await persistAttempt(
         {
@@ -242,8 +325,21 @@ export function WritingRunner({
     onNext,
   };
 
+  const scoringDialog = (
+    <PracticeScoringDialog
+      open={scoringDialogOpen}
+      onOpenChange={setScoringDialogOpen}
+      phase={scoringPhase}
+      error={scoringError}
+      writing={writingScore}
+      responseText={text}
+    />
+  );
+
   if (part === "1") {
     return (
+      <>
+      {scoringDialog}
       <WritingPracticeShell
         {...shellProps}
         layout="split"
@@ -267,55 +363,53 @@ export function WritingRunner({
             onChange={setText}
             onRetry={handleRetry}
             scoreSlot={
-              submitted ? (
-                <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
-                  <PracticeScoreResult
-                    phase={scoringPhase}
-                    error={scoringError}
-                    writing={writingScore}
-                    responseText={text}
-                    className="shrink-0"
-                  />
-                  {scoringPhase === "done" && (
-                    <Button onClick={handleRetry} variant="outline" size="sm" className="mx-auto gap-2">
-                      <RotateCcw className="size-3.5" /> Re-do
-                    </Button>
-                  )}
-                </div>
+              submitted && !deferResults && scoringPhase === "done" ? (
+                <p className="text-center text-sm text-slate-500">
+                  Your score is shown in the popup. Close it to continue practising.
+                </p>
               ) : undefined
             }
           />
         }
         footer={
-          !submitted ? (
-            <WritingPart1Footer
-              wordCount={wordCount}
-              minWords={minWords}
-              maxWords={maxWords}
-              canSubmit={canSubmit && !isSubmitting}
-              submitting={isSubmitting}
-              onSubmit={handleSubmit}
-            />
-          ) : undefined
+          <>
+            {!submitted && (
+              <WritingWordCountBar count={wordCount} min={minWords} max={maxWords} className="max-w-[220px] shrink-0" />
+            )}
+            {practiceTaskFooter({
+              canSubmit,
+              isSubmitting,
+              submitted,
+              deferResults,
+              isLastStep: mockRun?.isLastStep ?? false,
+              onSubmit: handleSubmit,
+              onRedo: handleRetry,
+              submitVariant: "answer",
+            })}
+          </>
         }
+        footerTop={practiceFooterTop(submitted, deferResults, mockRun?.isLastStep ?? false)}
       />
+      </>
     );
   }
 
   return (
+    <>
+    {scoringDialog}
     <WritingPracticeShell
       {...shellProps}
-      footer={
-        !submitted ? (
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-            className="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 sm:ml-auto sm:w-auto"
-          >
-            {isSubmitting ? "Submitting…" : "Submit Answer"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep: mockRun?.isLastStep ?? false,
+        onSubmit: handleSubmit,
+        onRedo: handleRetry,
+        submitVariant: "answer",
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, mockRun?.isLastStep ?? false)}
     >
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="rounded-lg border border-slate-300 bg-slate-100 p-4 md:p-5">
@@ -333,18 +427,11 @@ export function WritingRunner({
           </p>
         </div>
 
-        {submitted ? (
-          <div className="space-y-4">
-            <PracticeScoreResult phase={scoringPhase} error={scoringError} writing={writingScore} responseText={text} />
-            {scoringPhase === "done" && (
-              <div className="text-center">
-                <Button onClick={handleRetry} variant="outline" size="sm" className="gap-2">
-                  <RotateCcw className="size-3.5" /> Re-do
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
+        {submitted && !deferResults && scoringPhase === "done" ? (
+          <p className="text-center text-sm text-slate-500">
+            Your score is shown in the popup. Close it to continue practising.
+          </p>
+        ) : !submitted ? (
           <WritingRichEditor
             value={text}
             onChange={setText}
@@ -352,9 +439,10 @@ export function WritingRunner({
             maxWords={maxWords}
             resetKey={`${question.id}-${attemptKey}`}
           />
-        )}
+        ) : null}
       </div>
     </WritingPracticeShell>
+    </>
   );
 }
 
@@ -379,23 +467,35 @@ function Reading1ARunner({
 }: { question: WritingQuestion; onRetry: () => void } & ReadingNavProps) {
   const items = parseJson<Q1A[]>(question.image_path) ?? [];
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
   const LABELS = ["A", "B", "C", "D", "E", "F"];
 
   const score = items.filter((item, i) => answers[i] === LABELS[item.correctAnswer]).length;
   const allAnswered = items.length > 0 && items.every((_, i) => answers[i]);
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "reading_part_1a",
-        question_set_id: question.id,
-        score,
-        total: items.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "reading_part_1a",
+      questionSetId: question.id,
+      answers,
+      items: items.map((item) => ({ correctAnswer: item.correctAnswer })),
+      labelMode: "index",
+      labelLetters: LABELS,
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "reading_part_1a",
+          question_set_id: question.id,
+          score,
+          total: items.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   return (
     <ReadingPracticeShell
@@ -404,13 +504,17 @@ function Reading1ARunner({
       totalSets={totalSets}
       onPrevious={onPrevious}
       onNext={onNext}
-      footer={
-        !revealed && items.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+        enabled: items.length > 0,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     >
       {items.length === 0 ? (
         <p className="py-8 text-center text-sm italic text-slate-400">No questions found in this set.</p>
@@ -423,12 +527,21 @@ function Reading1ARunner({
               prompt={item.questionText}
               options={item.options.map((opt, oi) => ({ label: LABELS[oi], text: opt }))}
               selected={answers[qi]}
-              revealed={revealed}
+              revealed={showAnswers}
               correctAnswer={LABELS[item.correctAnswer]}
-              onSelect={(label) => !revealed && setAnswers((prev) => ({ ...prev, [qi]: label }))}
+              onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
             />
           ))}
-          {revealed && <ResultsScreen score={score} total={items.length} onRetry={onRetry} />}
+          {submitted && (
+            <SectionOutcome
+              revealed={submitted}
+              deferResults={deferResults}
+              isLastStep={isLastStep}
+              score={score}
+              total={items.length}
+              onRetry={onRetry}
+            />
+          )}
         </>
       )}
     </ReadingPracticeShell>
@@ -450,7 +563,7 @@ function Reading1BRunner({
 }: { question: WritingQuestion; onRetry: () => void } & ReadingNavProps) {
   const gapOptions = parseJson<Q1B[]>(question.image_path) ?? [];
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
   const LABELS = ["A", "B", "C", "D", "E", "F"];
 
   const parts = React.useMemo(() => question.question_text.split(/\(\d+\)……+/g), [question.question_text]);
@@ -458,17 +571,29 @@ function Reading1BRunner({
   const allAnswered = gapOptions.length > 0 && gapOptions.every((_, i) => answers[i]);
   const gapStartNum = 1;
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "reading_part_1b",
-        question_set_id: question.id,
-        score,
-        total: gapOptions.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "reading_part_1b",
+      questionSetId: question.id,
+      answers,
+      items: gapOptions.map((g) => ({ correctAnswer: g.correctAnswer })),
+      labelMode: "index",
+      labelLetters: LABELS,
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "reading_part_1b",
+          question_set_id: question.id,
+          score,
+          total: gapOptions.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -495,12 +620,21 @@ function Reading1BRunner({
           number={gapStartNum + gi}
           options={gap.options.map((opt, oi) => ({ label: LABELS[oi], text: opt }))}
           selected={answers[gi]}
-          revealed={revealed}
+          revealed={showAnswers}
           correctAnswer={LABELS[gap.correctAnswer]}
-          onSelect={(label) => !revealed && setAnswers((prev) => ({ ...prev, [gi]: label }))}
+          onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [gi]: label }))}
         />
       ))}
-      {revealed && <ResultsScreen score={score} total={gapOptions.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={gapOptions.length}
+          onRetry={onRetry}
+        />
+      )}
     </div>
   );
 
@@ -514,13 +648,16 @@ function Reading1BRunner({
       onNext={onNext}
       leftPanel={leftPanel}
       rightPanel={rightPanel}
-      footer={
-        !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
   );
 }
@@ -540,7 +677,7 @@ function Reading2Runner({
 }: { question: WritingQuestion; onRetry: () => void } & ReadingNavProps) {
   const data = parseJson<Q2Data>(question.image_path);
   const [selections, setSelections] = React.useState<Record<string, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
   const [activeGap, setActiveGap] = React.useState<string | null>(null);
 
   if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
@@ -553,7 +690,7 @@ function Reading2Runner({
   const passageParts = data.passage.split(/\[(\d+)\]/g);
 
   const assignSentence = (gapNum: string, label: string) => {
-    if (revealed) return;
+    if (submitted) return;
     setSelections((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((k) => {
@@ -565,17 +702,27 @@ function Reading2Runner({
     setActiveGap(null);
   };
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "reading_part_2",
-        question_set_id: question.id,
-        score,
-        total: gaps.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mapping",
+      questionType: "reading_part_2",
+      questionSetId: question.id,
+      selections,
+      correctMapping: data.correctMapping,
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "reading_part_2",
+          question_set_id: question.id,
+          score,
+          total: gaps.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -591,10 +738,10 @@ function Reading2Runner({
               gapId={gapNum}
               value={selected}
               label={correct}
-              revealed={revealed}
+              revealed={showAnswers}
               correct={selected === correct}
               onDrop={assignSentence}
-              onClear={() => !revealed && setSelections((prev) => {
+              onClear={() => !submitted && setSelections((prev) => {
                 const next = { ...prev };
                 delete next[gapNum];
                 return next;
@@ -617,7 +764,7 @@ function Reading2Runner({
             text={sentence}
             used={usedLabels.has(label)}
             onClick={() => {
-              if (revealed || !activeGap) return;
+              if (submitted || !activeGap) return;
               assignSentence(activeGap, label);
             }}
           />
@@ -626,7 +773,7 @@ function Reading2Runner({
       <p className="text-xs text-slate-500">
         Drag a sentence into a gap, or tap a gap then tap a sentence.
       </p>
-      {!revealed && (
+      {!submitted && (
         <div className="flex flex-wrap gap-2 pt-2">
           {gaps.map((g) => (
             <button
@@ -643,7 +790,16 @@ function Reading2Runner({
           ))}
         </div>
       )}
-      {revealed && <ResultsScreen score={score} total={gaps.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={gaps.length}
+          onRetry={onRetry}
+        />
+      )}
     </div>
   );
 
@@ -657,13 +813,16 @@ function Reading2Runner({
       onNext={onNext}
       leftPanel={leftPanel}
       rightPanel={rightPanel}
-      footer={
-        !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
   );
 }
@@ -686,7 +845,7 @@ function Reading3Runner({
 }: { question: WritingQuestion; onRetry: () => void } & ReadingNavProps) {
   const data = parseJson<Q3Data>(question.image_path);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
 
   if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
 
@@ -694,17 +853,27 @@ function Reading3Runner({
   const allAnswered = data.statements.length > 0 && data.statements.every((_, i) => answers[i]);
   const textOptions = data.passages.map((p) => p.label);
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "reading_part_3",
-        question_set_id: question.id,
-        score,
-        total: data.statements.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "statement_match",
+      questionType: "reading_part_3",
+      questionSetId: question.id,
+      answers,
+      statements: data.statements,
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "reading_part_3",
+          question_set_id: question.id,
+          score,
+          total: data.statements.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   const leftPanel = (
     <div className="space-y-4">
@@ -724,12 +893,21 @@ function Reading3Runner({
           text={stmt.text}
           options={textOptions}
           value={answers[i]}
-          revealed={revealed}
+          revealed={showAnswers}
           correct={stmt.correctAnswer}
-          onChange={(label) => !revealed && setAnswers((prev) => ({ ...prev, [i]: label }))}
+          onChange={(label) => !submitted && setAnswers((prev) => ({ ...prev, [i]: label }))}
         />
       ))}
-      {revealed && <ResultsScreen score={score} total={data.statements.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={data.statements.length}
+          onRetry={onRetry}
+        />
+      )}
     </div>
   );
 
@@ -743,13 +921,16 @@ function Reading3Runner({
       onNext={onNext}
       leftPanel={leftPanel}
       rightPanel={rightPanel}
-      footer={
-        !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
   );
 }
@@ -773,24 +954,34 @@ function Reading4Runner({
 }: { question: WritingQuestion; onRetry: () => void } & ReadingNavProps) {
   const data = parseJson<Q4Data>(question.image_path);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
 
   if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
 
   const score = data.questions.filter((q, i) => answers[i] === q.correctAnswer).length;
   const allAnswered = data.questions.every((_, i) => answers[i]);
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "reading_part_4",
-        question_set_id: question.id,
-        score,
-        total: data.questions.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "reading_part_4",
+      questionSetId: question.id,
+      answers,
+      items: data.questions.map((q) => ({ correctAnswer: q.correctAnswer })),
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "reading_part_4",
+          question_set_id: question.id,
+          score,
+          total: data.questions.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -810,12 +1001,21 @@ function Reading4Runner({
           prompt={q.text}
           options={Object.entries(q.options).map(([label, text]) => ({ label, text }))}
           selected={answers[qi]}
-          revealed={revealed}
+          revealed={showAnswers}
           correctAnswer={q.correctAnswer}
-          onSelect={(label) => !revealed && setAnswers((prev) => ({ ...prev, [qi]: label }))}
+          onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
         />
       ))}
-      {revealed && <ResultsScreen score={score} total={data.questions.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={data.questions.length}
+          onRetry={onRetry}
+        />
+      )}
     </div>
   );
 
@@ -829,13 +1029,16 @@ function Reading4Runner({
       onNext={onNext}
       leftPanel={leftPanel}
       rightPanel={rightPanel}
-      footer={
-        !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full sm:ml-auto sm:w-auto">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     />
   );
 }
@@ -923,6 +1126,7 @@ type L1Item = { optionA: string; optionB: string; optionC: string; correctAnswer
 type ListeningNavProps = {
   setIndex?: number;
   totalSets?: number;
+  attemptKey?: number;
   onPrevious?: () => void;
   onNext?: () => void;
   onAttemptSaved?: () => void;
@@ -933,13 +1137,14 @@ function Listening1Runner({
   onRetry,
   setIndex,
   totalSets,
+  attemptKey = 0,
   onPrevious,
   onNext,
   onAttemptSaved,
 }: { question: ListeningQuestion; onRetry: () => void } & ListeningNavProps) {
   const items = (question.questions ?? []) as unknown as L1Item[];
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const audioUrl = getAudioUrl(question.audio_path);
   const OPTS: (keyof L1Item)[] = ["optionA", "optionB", "optionC"];
@@ -947,33 +1152,48 @@ function Listening1Runner({
   const score = items.filter((item, i) => answers[i] === item.correctAnswer).length;
   const allAnswered = items.length > 0 && items.every((_, i) => answers[i]);
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "listening_part_1",
-        question_set_id: question.id,
-        score,
-        total: items.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "listening_part_1",
+      questionSetId: question.id,
+      answers,
+      items: items.map((item) => ({ correctAnswer: item.correctAnswer })),
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "listening_part_1",
+          question_set_id: question.id,
+          score,
+          total: items.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   return (
     <ListeningPracticeShell
       activePart={1}
       audioUrl={audioUrl}
+      audioResetKey={`${question.id}-${attemptKey}`}
       setIndex={setIndex}
       totalSets={totalSets}
       onPrevious={onPrevious}
       onNext={onNext}
-      footer={
-        !revealed && items.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+        enabled: items.length > 0,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     >
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 italic py-8 text-center">No questions found in this set.</p>
@@ -985,12 +1205,21 @@ function Listening1Runner({
               number={qi + 1}
               options={OPTS.map((opt, oi) => ({ label: LABELS[oi], text: String(item[opt]) }))}
               selected={answers[qi]}
-              revealed={revealed}
+              revealed={showAnswers}
               correctAnswer={item.correctAnswer}
-              onSelect={(label) => !revealed && setAnswers((prev) => ({ ...prev, [qi]: label }))}
+              onSelect={(label) => !submitted && setAnswers((prev) => ({ ...prev, [qi]: label }))}
             />
           ))}
-          {revealed && <ResultsScreen score={score} total={items.length} onRetry={onRetry} />}
+          {submitted && (
+            <SectionOutcome
+              revealed={submitted}
+              deferResults={deferResults}
+              isLastStep={isLastStep}
+              score={score}
+              total={items.length}
+              onRetry={onRetry}
+            />
+          )}
         </>
       )}
     </ListeningPracticeShell>
@@ -1009,13 +1238,14 @@ function Listening2Runner({
   onRetry,
   setIndex,
   totalSets,
+  attemptKey = 0,
   onPrevious,
   onNext,
   onAttemptSaved,
 }: { question: ListeningQuestion; onRetry: () => void } & ListeningNavProps) {
   const conversations = (question.questions ?? []) as unknown as L2Conversation[];
   const [answers, setAnswers] = React.useState<Record<string, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const audioUrl = getAudioUrl(question.audio_path);
   const LABELS = ["A", "B", "C"];
@@ -1026,17 +1256,29 @@ function Listening2Runner({
   const score = allSubQuestions.filter(({ ci, qi, q }) => answers[`${ci}-${qi}`] === q.correctAnswer).length;
   const allAnswered = allSubQuestions.length > 0 && allSubQuestions.every(({ ci, qi }) => answers[`${ci}-${qi}`]);
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "listening_part_2",
-        question_set_id: question.id,
-        score,
-        total: allSubQuestions.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "listening_part_2",
+      questionSetId: question.id,
+      answers: Object.fromEntries(
+        allSubQuestions.map(({ ci, qi }, idx) => [idx, answers[`${ci}-${qi}`] ?? ""]),
+      ),
+      items: allSubQuestions.map(({ q }) => ({ correctAnswer: q.correctAnswer })),
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "listening_part_2",
+          question_set_id: question.id,
+          score,
+          total: allSubQuestions.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
   let questionNum = 0;
 
@@ -1044,17 +1286,22 @@ function Listening2Runner({
     <ListeningPracticeShell
       activePart={2}
       audioUrl={audioUrl}
+      audioResetKey={`${question.id}-${attemptKey}`}
       setIndex={setIndex}
       totalSets={totalSets}
       onPrevious={onPrevious}
       onNext={onNext}
-      footer={
-        !revealed && allSubQuestions.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+        enabled: allSubQuestions.length > 0,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     >
       {conversations.map((conv, ci) => (
         <div key={ci} className="space-y-4">
@@ -1075,77 +1322,112 @@ function Listening2Runner({
                   text: sq[opt],
                 }))}
                 selected={answers[`${ci}-${qi}`]}
-                revealed={revealed}
+                revealed={showAnswers}
                 correctAnswer={sq.correctAnswer}
                 onSelect={(label) =>
-                  !revealed && setAnswers((prev) => ({ ...prev, [`${ci}-${qi}`]: label }))
+                  !submitted && setAnswers((prev) => ({ ...prev, [`${ci}-${qi}`]: label }))
                 }
               />
             );
           })}
         </div>
       ))}
-      {revealed && <ResultsScreen score={score} total={allSubQuestions.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={allSubQuestions.length}
+          onRetry={onRetry}
+        />
+      )}
     </ListeningPracticeShell>
   );
 }
 
 // ── Listening Part 3 — Note Completion ───────────────────────────────────────
 
-type L3Data = { title?: string; questionText: string; answers: string[] };
-
 function Listening3Runner({
   question,
   onRetry,
   setIndex,
   totalSets,
+  attemptKey = 0,
   onPrevious,
   onNext,
   onAttemptSaved,
 }: { question: ListeningQuestion; onRetry: () => void } & ListeningNavProps) {
-  const data = (Array.isArray(question.questions) ? null : question.questions) as unknown as L3Data | null;
+  const data = normalizeListeningPart3Data(question.questions);
   const [inputs, setInputs] = React.useState<Record<number, string>>({});
-  const [revealed, setRevealed] = React.useState(false);
-
-  if (!data) return <p className="text-sm text-slate-400 italic py-8 text-center">Invalid question data.</p>;
+  const [submitted, setSubmitted] = React.useState(false);
 
   const audioUrl = getAudioUrl(question.audio_path);
-  const answers = data.answers ?? [];
+  const answers = data?.answers ?? [];
   const score = answers.filter((ans, i) =>
     (inputs[i] ?? "").trim().toLowerCase() === ans.trim().toLowerCase()
   ).length;
   const allFilled = answers.length > 0 && answers.every((_, i) => (inputs[i] ?? "").trim());
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "listening_part_3",
-        question_set_id: question.id,
-        score,
-        total: answers.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "gap_fill",
+      questionType: "listening_part_3",
+      questionSetId: question.id,
+      inputs,
+      correctAnswers: answers,
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "listening_part_3",
+          question_set_id: question.id,
+          score,
+          total: answers.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
 
-  // Replace [___1___] style markers with inputs
+  if (!data) {
+    return (
+      <ListeningPracticeShell
+        activePart={3}
+        audioUrl={audioUrl}
+        audioResetKey={`${question.id}-${attemptKey}`}
+        setIndex={setIndex}
+        totalSets={totalSets}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      >
+        <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>
+      </ListeningPracticeShell>
+    );
+  }
+
   const parts = data.questionText.split(/\[___(\d+)___\]/g);
 
   return (
     <ListeningPracticeShell
       activePart={3}
       audioUrl={audioUrl}
+      audioResetKey={`${question.id}-${attemptKey}`}
       setIndex={setIndex}
       totalSets={totalSets}
       onPrevious={onPrevious}
       onNext={onNext}
-      footer={
-        !revealed ? (
-          <Button onClick={handleSubmit} disabled={!allFilled || isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allFilled,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     >
       <div className="border border-slate-200 bg-white">
         {data.title && (
@@ -1165,18 +1447,18 @@ function Listening3Runner({
                 <span key={pi} className="inline-flex items-center gap-1 mx-1">
                   <input
                     type="text"
-                    disabled={revealed}
+                    disabled={submitted}
                     value={val}
                     onChange={(e) => setInputs((prev) => ({ ...prev, [idx]: e.target.value }))}
                     placeholder={`(${idx + 1})`}
                     className={cn(
                       "border rounded px-2 py-1 text-sm w-32 text-center",
-                      revealed
+                      showAnswers
                         ? isCorrect ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-rose-400 bg-rose-50 text-rose-800"
                         : "border-slate-300 bg-white focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-200",
                     )}
                   />
-                  {revealed && !isCorrect && (
+                  {showAnswers && !isCorrect && (
                     <span className="text-xs text-emerald-700 font-medium">✓ {correct}</span>
                   )}
                 </span>
@@ -1185,63 +1467,102 @@ function Listening3Runner({
           </p>
         </div>
       </div>
-      {revealed && <ResultsScreen score={score} total={answers.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={answers.length}
+          onRetry={onRetry}
+        />
+      )}
     </ListeningPracticeShell>
   );
 }
 
 // ── Listening Part 4 — Extended Discussion ────────────────────────────────────
 
-type L4Data = { description?: string; questions: { questionText: string; options: string[]; correctAnswer: number }[] };
-
 function Listening4Runner({
   question,
   onRetry,
   setIndex,
   totalSets,
+  attemptKey = 0,
   onPrevious,
   onNext,
   onAttemptSaved,
 }: { question: ListeningQuestion; onRetry: () => void } & ListeningNavProps) {
-  const data = (Array.isArray(question.questions) ? null : question.questions) as unknown as L4Data | null;
+  const data = normalizeListeningPart4Data(question.questions);
   const [answers, setAnswers] = React.useState<Record<number, number>>({});
-  const [revealed, setRevealed] = React.useState(false);
-
-  if (!data) return <p className="text-sm text-slate-400 italic py-8 text-center">Invalid question data.</p>;
+  const [submitted, setSubmitted] = React.useState(false);
 
   const audioUrl = getAudioUrl(question.audio_path);
-  const qs = data.questions ?? [];
+  const qs = data?.questions ?? [];
   const score = qs.filter((q, i) => answers[i] === q.correctAnswer).length;
   const allAnswered = qs.length > 0 && qs.every((_, i) => answers[i] !== undefined);
   const LABELS = ["A", "B", "C", "D", "E"];
 
-  const { handleSubmit, isSubmitting } = useSubmitAnswers(setRevealed, () =>
-    persistAttempt(
-      {
-        question_type: "listening_part_4",
-        question_set_id: question.id,
-        score,
-        total: qs.length,
-      },
-      onAttemptSaved,
-    ),
+  const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
+    setSubmitted,
+    () => ({
+      kind: "mcq",
+      questionType: "listening_part_4",
+      questionSetId: question.id,
+      answers: Object.fromEntries(
+        qs.map((_, i) => [i, answers[i] !== undefined ? LABELS[answers[i]!] : ""]),
+      ),
+      items: qs.map((q) => ({ correctAnswer: LABELS[q.correctAnswer] })),
+    }),
+    () =>
+      persistAttempt(
+        {
+          question_type: "listening_part_4",
+          question_set_id: question.id,
+          score,
+          total: qs.length,
+        },
+        onAttemptSaved,
+      ),
   );
+  const showAnswers = mockShowAnswers(submitted, deferResults);
+
+  if (!data || qs.length === 0) {
+    return (
+      <ListeningPracticeShell
+        activePart={4}
+        audioUrl={audioUrl}
+        audioResetKey={`${question.id}-${attemptKey}`}
+        setIndex={setIndex}
+        totalSets={totalSets}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      >
+        <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>
+      </ListeningPracticeShell>
+    );
+  }
 
   return (
     <ListeningPracticeShell
       activePart={4}
       audioUrl={audioUrl}
+      audioResetKey={`${question.id}-${attemptKey}`}
       setIndex={setIndex}
       totalSets={totalSets}
       onPrevious={onPrevious}
       onNext={onNext}
-      footer={
-        !revealed && qs.length > 0 ? (
-          <Button onClick={handleSubmit} disabled={!allAnswered || isSubmitting} className="w-full">
-            {isSubmitting ? "Submitting…" : "Submit Answers"}
-          </Button>
-        ) : undefined
-      }
+      footer={practiceTaskFooter({
+        canSubmit: allAnswered,
+        isSubmitting,
+        submitted,
+        deferResults,
+        isLastStep,
+        onSubmit: handleSubmit,
+        onRedo: onRetry,
+        enabled: qs.length > 0,
+      })}
+      footerTop={practiceFooterTop(submitted, deferResults, isLastStep)}
     >
       {data.description && (
         <div className="rounded border border-slate-300 bg-slate-50 px-4 py-3">
@@ -1255,15 +1576,24 @@ function Listening4Runner({
           prompt={q.questionText}
           options={(q.options ?? []).map((opt, oi) => ({ label: LABELS[oi], text: opt }))}
           selected={answers[qi] !== undefined ? LABELS[answers[qi]] : undefined}
-          revealed={revealed}
+          revealed={showAnswers}
           correctAnswer={LABELS[q.correctAnswer]}
           onSelect={(label) => {
             const idx = LABELS.indexOf(label);
-            if (!revealed && idx >= 0) setAnswers((prev) => ({ ...prev, [qi]: idx }));
+            if (!submitted && idx >= 0) setAnswers((prev) => ({ ...prev, [qi]: idx }));
           }}
         />
       ))}
-      {revealed && <ResultsScreen score={score} total={qs.length} onRetry={onRetry} />}
+      {submitted && (
+        <SectionOutcome
+          revealed={showAnswers}
+          deferResults={deferResults}
+          isLastStep={isLastStep}
+          score={score}
+          total={qs.length}
+          onRetry={onRetry}
+        />
+      )}
     </ListeningPracticeShell>
   );
 }
@@ -1308,6 +1638,7 @@ export function ListeningSection({
   const navProps: ListeningNavProps = {
     setIndex: questionIndex,
     totalSets: totalSets ?? questions.length,
+    attemptKey,
     onPrevious,
     onNext,
     onAttemptSaved,

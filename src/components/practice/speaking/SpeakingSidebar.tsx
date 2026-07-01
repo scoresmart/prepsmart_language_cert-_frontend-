@@ -30,13 +30,8 @@ export function SpeakingSidebar({
   const elapsed = maxDuration - recordSecondsLeft;
 
   return (
-    <aside
-      className={cn(
-        "flex w-full shrink-0 flex-col self-stretch border-t border-slate-200 bg-slate-50 p-4 md:w-72 md:border-l md:border-t-0",
-        className,
-      )}
-    >
-      <div className="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <aside className={cn("flex h-full w-full flex-col p-3 lg:p-4", className)}>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Lightbulb className="size-4 text-amber-500" />
           Speaking Tips
@@ -48,12 +43,12 @@ export function SpeakingSidebar({
         </ol>
       </div>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Timer className="size-4 text-cyan-600" />
           Recording Status
         </div>
-        <dl className="mt-4 space-y-3 text-sm">
+        <dl className="mt-3 space-y-2 text-sm">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-slate-500">State</dt>
             <dd className="font-semibold text-slate-800">{phaseLabel(phase)}</dd>
@@ -69,10 +64,9 @@ export function SpeakingSidebar({
             </dd>
           </div>
         </dl>
-        <div className="mt-auto pt-6 text-xs leading-relaxed text-slate-400">
-          Allow microphone access when prompted. Listen to the examiner first — after the audio ends
-          you have 5 seconds to prepare, then recording starts automatically once the mic is enabled.
-        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+          Listen to the examiner first, then record your answer when prompted.
+        </p>
       </div>
     </aside>
   );

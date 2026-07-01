@@ -1,14 +1,11 @@
 import * as React from "react";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
 import { PracticeMyAttemptsSection } from "@/components/practice/PracticeMyAttemptsSection";
 import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab";
 import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
-import {
-  SpeakingPracticeProvider,
-  SpeakingSidebarPanel,
-} from "@/components/practice/speaking/SpeakingPracticeContext";
+import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
 import { usePracticeAttempts, usePracticeQuestions } from "@/hooks/usePracticeQuestions";
@@ -40,7 +37,7 @@ export function PracticeQuestionPage() {
   const [navOpen, setNavOpen] = React.useState(false);
   const [attemptKey, setAttemptKey] = React.useState(0);
 
-  const { questions, total, isLoading, isError, refetch, questionType } = usePracticeQuestions(module, part);
+  const { questions, total, isLoading, isError, error, needsSignIn, refetch, questionType } = usePracticeQuestions(module, part);
   const attemptsQ = usePracticeAttempts(questionType);
   const completedIds = React.useMemo(
     () => new Set((attemptsQ.data ?? []).map((a) => a.question_set_id)),
@@ -92,21 +89,38 @@ export function PracticeQuestionPage() {
     );
   }
 
+  if (needsSignIn) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
   if (isError) {
+    const message = error instanceof Error ? error.message : "Request failed";
+    const isAuthError = /authentication|sign in|expired token|invalid or expired/i.test(message);
+
     return (
       <PracticeWorkspaceLayout>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <p className="text-lg font-semibold text-slate-800">Could not load questions</p>
           <p className="max-w-md text-sm text-slate-500">
-            Sign in and ensure the backend is running on port 5000, then try again.
+            {isAuthError
+              ? "Your session has expired or you are not signed in. Please sign in again to load practice questions."
+              : message.includes("Network error")
+                ? message
+                : "Ensure the backend is running on port 5000, then try again."}
           </p>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="text-sm font-medium text-cyan-700 hover:text-cyan-900"
-          >
-            Retry
-          </button>
+          {isAuthError ? (
+            <Link to="/login" state={{ from: location.pathname }} className="text-sm font-medium text-violet-700 hover:text-violet-900">
+              Sign in
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-sm font-medium text-cyan-700 hover:text-cyan-900"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </PracticeWorkspaceLayout>
     );
@@ -144,15 +158,15 @@ export function PracticeQuestionPage() {
   const sectionLabel = getSectionLabel(module);
   const partLabel = getPartLabel(module, part);
   const questionFrameClass =
-    module === "speaking" || (module === "writing" && part === "1")
-      ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
-      : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+    module === "speaking"
+      ? "flex h-[calc(100dvh-3.5rem)] min-h-0 shrink-0 flex-col overflow-hidden"
+      : module === "writing" && part === "1"
+        ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
+        : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
 
   return (
     <PracticeWorkspaceLayout>
       <PracticeWorkspaceBar
-        module={module}
-        part={part}
         questionIndex={clampedIndex}
         totalQuestions={total}
         practicedCount={practicedCount}
@@ -176,8 +190,32 @@ export function PracticeQuestionPage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <PracticePartSidebar onOpenNavigator={() => setNavOpen(true)} />
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {module === "speaking" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className={questionFrameClass}>
+                  <div className="h-full min-h-0">
+                    <SpeakingSection
+                      part={part}
+                      questionIndex={clampedIndex}
+                      totalSets={total}
+                      attemptKey={attemptKey}
+                      onRetry={() => setAttemptKey((k) => k + 1)}
+                      onPrevious={() => goTo(clampedIndex - 1)}
+                      onNext={() => goTo(clampedIndex + 1)}
+                      onAttemptSaved={handleAttemptSaved}
+                    />
+                  </div>
+                </div>
+                <PracticeMyAttemptsSection
+                  module={module}
+                  questions={questions}
+                  attempts={attemptsQ.data ?? []}
+                  currentQuestionId={currentQuestion?.id}
+                  onSelectQuestion={goTo}
+                />
+              </div>
+            ) : (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className={questionFrameClass}>
                   {module === "listening" && (
@@ -219,20 +257,6 @@ export function PracticeQuestionPage() {
                     />
                   </div>
                 )}
-                {module === "speaking" && (
-                  <div className="h-full min-h-0">
-                    <SpeakingSection
-                      part={part}
-                      questionIndex={clampedIndex}
-                      totalSets={total}
-                      attemptKey={attemptKey}
-                      onRetry={() => setAttemptKey((k) => k + 1)}
-                      onPrevious={() => goTo(clampedIndex - 1)}
-                      onNext={() => goTo(clampedIndex + 1)}
-                      onAttemptSaved={handleAttemptSaved}
-                    />
-                  </div>
-                  )}
                 </div>
 
                 <PracticeMyAttemptsSection
@@ -243,9 +267,7 @@ export function PracticeQuestionPage() {
                   onSelectQuestion={goTo}
                 />
               </div>
-            </div>
-
-            {module === "speaking" && <SpeakingSidebarPanel />}
+            )}
           </div>
         </div>
       </SpeakingPracticeProvider>
