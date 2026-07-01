@@ -50,21 +50,21 @@ function scorePercent(score: number, total: number): number {
   return Math.round((score / total) * 100);
 }
 
-function scoreColorClass(score: number, total: number, dark = false): string {
-  if (total <= 0) return dark ? "text-white/50" : "text-slate-500";
+function scoreColorClass(score: number, total: number): string {
+  if (total <= 0) return "text-slate-500";
   const ratio = score / total;
-  if (ratio >= 0.7) return dark ? "text-emerald-400" : "text-emerald-600";
-  if (ratio >= 0.5) return dark ? "text-amber-400" : "text-amber-600";
-  return dark ? "text-rose-400" : "text-rose-600";
+  if (ratio >= 0.7) return "text-emerald-600";
+  if (ratio >= 0.5) return "text-amber-600";
+  return "text-rose-600";
 }
 
 function BasicAttemptScore({ score, total }: { score: number; total: number }) {
   const pct = scorePercent(score, total);
-  const color = scoreColorClass(score, total, true);
+  const color = scoreColorClass(score, total);
 
   return (
-    <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-2">
-      <span className="text-xs font-medium text-white/55">Score</span>
+    <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <span className="text-xs font-medium text-slate-600">Score</span>
       <span className={cn("text-sm font-bold tabular-nums", color)}>
         {score}/{total}
       </span>
@@ -84,14 +84,15 @@ function ScoreInfoBadge({
   onClick: () => void;
   disabled?: boolean;
 }) {
-  const scoreColor = scoreColorClass(score, total, true);
+  const scoreColor =
+    total > 0 && score / total >= 0.7 ? "text-emerald-600" : "text-amber-700";
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
     >
       Score Info
       <span className={cn("font-bold tabular-nums", scoreColor)}>
@@ -103,7 +104,7 @@ function ScoreInfoBadge({
 
 function TaskTypeBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex rounded-full border border-cyan-500/40 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-white/80">
+    <span className="inline-flex rounded-full border border-teal-300 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700">
       {label}
     </span>
   );
@@ -141,20 +142,20 @@ function SpeakingAttemptItem({
   }, [attempt.question_set_id, remoteRecording]);
 
   return (
-    <li className="border-b border-white/10 px-4 py-4 last:border-b-0">
+    <li className="border-b border-slate-100 px-4 py-4 last:border-b-0">
       <div className="mb-3 flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold text-white/60">
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
           <User className="size-3" />
           Me
         </span>
       </div>
       <div className="flex items-center gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs font-bold text-cyan-300">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-bold text-cyan-800">
           {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold uppercase tracking-wide text-white">{displayName}</p>
-          <p className="text-xs text-white/45">{format(new Date(attempt.created_at), "yyyy-MM-dd")}</p>
+          <p className="text-sm font-bold uppercase tracking-wide text-slate-800">{displayName}</p>
+          <p className="text-xs text-slate-500">{format(new Date(attempt.created_at), "yyyy-MM-dd")}</p>
         </div>
       </div>
       {audioSrc && (
@@ -173,7 +174,7 @@ function SpeakingAttemptItem({
           />
         )}
         {!audioSrc && (
-          <span className="text-xs text-white/35">Recording not available in this browser session</span>
+          <span className="text-xs text-slate-400">Recording not available in this browser session</span>
         )}
       </div>
     </li>
@@ -182,12 +183,12 @@ function SpeakingAttemptItem({
 
 export function PracticeMyAttemptsHeading({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center justify-center gap-4 border-b border-white/10 px-4 py-4", className)}>
-      <div className="h-px w-16 max-w-32 flex-1 bg-white/15" />
-      <h2 className="shrink-0 px-2 text-sm font-bold uppercase tracking-wide text-white/80">
+    <div className={cn("flex items-center justify-center gap-4 bg-slate-50 px-4 py-4", className)}>
+      <div className="h-px w-16 max-w-32 flex-1 bg-slate-200" />
+      <h2 className="shrink-0 px-2 text-sm font-bold uppercase tracking-wide text-slate-700">
         My Attempts
       </h2>
-      <div className="h-px w-16 max-w-32 flex-1 bg-white/15" />
+      <div className="h-px w-16 max-w-32 flex-1 bg-slate-200" />
     </div>
   );
 }
@@ -271,24 +272,24 @@ export function PracticeMyAttemptsContent({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-8 pt-4 md:px-6">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-12 pt-2 md:px-6">
         {currentQuestion && (
-          <p className="text-center text-xs text-white/45">
+          <p className="text-center text-xs text-slate-500">
             Attempts for{" "}
-            <span className="font-medium text-white/75">
+            <span className="font-medium text-slate-700">
               #{currentQuestion.index} {currentQuestion.title}
             </span>
           </p>
         )}
 
         {questionAttempts.length === 0 ? (
-          <p className="py-6 text-center text-sm text-white/40">
+          <p className="py-6 text-center text-sm text-slate-400">
             {isSpeaking
               ? "No attempts for this question yet. Submit your recording to see it here."
               : "No attempts for this question yet. Complete and submit to see your history here."}
           </p>
         ) : isSpeaking ? (
-          <ul className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+          <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {questionAttempts.map((att) => (
               <SpeakingAttemptItem
                 key={att.id}
@@ -300,15 +301,15 @@ export function PracticeMyAttemptsContent({
             ))}
           </ul>
         ) : (
-          <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 bg-white">
             {questionAttempts.map((att) => {
               const answer = getLocalAnswer(att.question_set_id);
               return (
                 <li key={att.id} className="p-4">
                   <div className="flex w-full items-start gap-3 text-left">
-                    <History className="mt-0.5 size-5 shrink-0 text-emerald-400" />
+                    <History className="mt-0.5 size-5 shrink-0 text-emerald-500" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-slate-800">
                         Attempt {format(new Date(att.created_at), "dd MMM yyyy, HH:mm")}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -324,11 +325,11 @@ export function PracticeMyAttemptsContent({
                             />
                           )
                         ) : (
-                          <span className="text-xs text-white/40">Submitted</span>
+                          <span className="text-xs text-slate-400">Submitted</span>
                         )}
                       </div>
                       {module === "writing" && answer && (
-                        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-white/55">{answer}</p>
+                        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-slate-600">{answer}</p>
                       )}
                     </div>
                   </div>
@@ -356,7 +357,7 @@ export function PracticeMyAttemptsContent({
 /** Heading + content in one scroll section (heading always above list). */
 export function PracticeMyAttemptsSection(props: Props) {
   return (
-    <section id="practice-my-attempts" className="shrink-0 border-t border-white/10 bg-[#111827]">
+    <section id="practice-my-attempts" className="shrink-0 border-t border-slate-200 bg-slate-50">
       <PracticeMyAttemptsHeading />
       <PracticeMyAttemptsContent {...props} />
     </section>
