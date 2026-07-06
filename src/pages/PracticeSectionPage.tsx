@@ -1181,7 +1181,7 @@ function Listening1Runner({
   }, [submitted, deferResults, items, answers]);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ListeningResultsDialog
         open={resultsOpen}
         onOpenChange={setResultsOpen}
@@ -1227,7 +1227,7 @@ function Listening1Runner({
         </>
       )}
     </ListeningPracticeShell>
-    </>
+    </div>
   );
 }
 
@@ -1309,7 +1309,7 @@ function Listening2Runner({
   let questionNum = 0;
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ListeningResultsDialog
         open={resultsOpen}
         onOpenChange={setResultsOpen}
@@ -1368,7 +1368,7 @@ function Listening2Runner({
         </div>
       ))}
     </ListeningPracticeShell>
-    </>
+    </div>
   );
 }
 
@@ -1478,7 +1478,7 @@ function Listening3Runner({
   const parts = data.questionText.split(/\[___(\d+)___\]/g);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ListeningResultsDialog
         open={resultsOpen}
         onOpenChange={setResultsOpen}
@@ -1545,7 +1545,7 @@ function Listening3Runner({
         </div>
       </div>
     </ListeningPracticeShell>
-    </>
+    </div>
   );
 }
 
@@ -1625,7 +1625,7 @@ function Listening4Runner({
   }
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ListeningResultsDialog
         open={resultsOpen}
         onOpenChange={setResultsOpen}
@@ -1674,11 +1674,13 @@ function Listening4Runner({
         />
       ))}
     </ListeningPracticeShell>
-    </>
+    </div>
   );
 }
 
 // ── Listening Section Router ──────────────────────────────────────────────────
+
+const LISTENING_SECTION_FRAME = "flex min-h-0 flex-1 flex-col overflow-hidden";
 
 export function ListeningSection({
   part,
@@ -1724,13 +1726,34 @@ export function ListeningSection({
     onAttemptSaved,
   };
 
-  if (!fixedQuestion && q.isLoading) return <LoadingState />;
-  if (!question) return <EmptyState label={`Listening Part ${part}`} />;
+  if (!fixedQuestion && q.isLoading) {
+    return (
+      <div className={LISTENING_SECTION_FRAME}>
+        <LoadingState />
+      </div>
+    );
+  }
+  if (!question) {
+    return (
+      <div className={LISTENING_SECTION_FRAME}>
+        <EmptyState label={`Listening Part ${part}`} />
+      </div>
+    );
+  }
 
-  if (partNum === 1) return <Listening1Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />;
-  if (partNum === 2) return <Listening2Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />;
-  if (partNum === 3) return <Listening3Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />;
-  if (partNum === 4) return <Listening4Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />;
-  return <EmptyState label={`Listening Part ${part}`} />;
+  const runner =
+    partNum === 1 ? (
+      <Listening1Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />
+    ) : partNum === 2 ? (
+      <Listening2Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />
+    ) : partNum === 3 ? (
+      <Listening3Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />
+    ) : partNum === 4 ? (
+      <Listening4Runner key={runnerKey} question={question} onRetry={() => onRetry?.()} {...navProps} />
+    ) : (
+      <EmptyState label={`Listening Part ${part}`} />
+    );
+
+  return <div className={LISTENING_SECTION_FRAME}>{runner}</div>;
 }
 

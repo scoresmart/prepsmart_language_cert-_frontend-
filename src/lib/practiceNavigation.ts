@@ -26,6 +26,17 @@ export function difficultyLabel(index: number): "Easy" | "Medium" | "Hard" {
 
 }
 
+/** Shared workspace content frame — practice + mock test. */
+export function practiceQuestionFrameClass(module: string, part: string): string {
+  if (module === "speaking") {
+    return "flex h-[calc(100dvh-3.5rem)] min-h-0 shrink-0 flex-col overflow-hidden";
+  }
+  if (module === "writing" && part === "1") {
+    return "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden";
+  }
+  return "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+}
+
 
 
 export { partQuestionsUrl as practiceQuestionsHubUrl } from "@/lib/practiceRoutes";

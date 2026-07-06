@@ -1,5 +1,8 @@
 /** LanguageCert Academic / Academic SELT — official mock test format. */
 
+import type { WritingQuestion } from "@/lib/api";
+import type { PracticeQuestionItem } from "@/lib/practiceQuestions";
+
 export const MOCK_EXAM_TITLE = "LanguageCert Academic";
 export const MOCK_EXAM_TOTAL_MINUTES = 154; // ~2h 34m
 export const MOCK_ACTIVITY_SCREENS = 15;
@@ -161,3 +164,15 @@ export const MOCK_TOTALS = {
 
 /** DB-backed sections assembled in admin (speaking uses practice bank in runner). */
 export const MOCK_DB_SECTION_COUNT = 11;
+
+const MOCK_NAV_PLACEHOLDER = {} as WritingQuestion;
+
+/** Navigator items for mock test workspace (same shape as practice question list). */
+export function mockTestNavigatorItems(): PracticeQuestionItem[] {
+  return MOCK_TEST_STEPS.map((step, i) => ({
+    id: step.key,
+    index: i + 1,
+    title: step.label,
+    raw: MOCK_NAV_PLACEHOLDER,
+  }));
+}

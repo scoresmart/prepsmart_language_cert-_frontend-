@@ -9,7 +9,7 @@ import { SpeakingPracticeProvider } from "@/components/practice/speaking/Speakin
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
 import { usePracticeAttempts, usePracticeQuestions } from "@/hooks/usePracticeQuestions";
-import { parseQuestionIndex } from "@/lib/practiceNavigation";
+import { parseQuestionIndex, practiceQuestionFrameClass } from "@/lib/practiceNavigation";
 import { getPartLabel, getSectionLabel } from "@/lib/practiceQuestions";
 import {
   isPracticeModule,
@@ -157,12 +157,7 @@ export function PracticeQuestionPage() {
 
   const sectionLabel = getSectionLabel(module);
   const partLabel = getPartLabel(module, part);
-  const questionFrameClass =
-    module === "speaking"
-      ? "flex h-[calc(100dvh-3.5rem)] min-h-0 shrink-0 flex-col overflow-hidden"
-      : module === "writing" && part === "1"
-        ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
-        : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+  const questionFrameClass = practiceQuestionFrameClass(module, part);
 
   return (
     <PracticeWorkspaceLayout>

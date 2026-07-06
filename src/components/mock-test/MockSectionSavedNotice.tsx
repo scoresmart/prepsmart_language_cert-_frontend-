@@ -4,12 +4,12 @@ export function MockSectionSavedNotice({ isLastStep }: { isLastStep?: boolean })
   return (
     <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="font-semibold">Answers saved</p>
         <p className="mt-0.5 text-emerald-800/90">
           {isLastStep
             ? "Calculating your mock test score…"
-            : "Your answers are saved and locked. Use the Next section button at the top to continue — scores appear on the results page after you finish the mock test."}
+            : "Your answers are saved and locked. Use Previous or Next at the bottom to move between sections — scores appear on the results page after you finish the mock test."}
         </p>
       </div>
     </div>

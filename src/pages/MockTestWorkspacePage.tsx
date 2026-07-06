@@ -1,36 +1,46 @@
 import * as React from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
+import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab";
 import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
-import { MockTestWorkspaceBar } from "@/components/mock-test/MockTestWorkspaceBar";
+import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
+import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
 import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { api } from "@/lib/api";
-import { MOCK_TEST_STEPS, READING_STEP_TO_PART_TYPE } from "@/lib/mockTestFormat";
+import {
+  MOCK_TEST_STEPS,
+  mockTestNavigatorItems,
+  READING_STEP_TO_PART_TYPE,
+} from "@/lib/mockTestFormat";
 import { setMockTestContext } from "@/lib/mockTestRecorder";
-import { MockTestRunProvider } from "@/providers/MockTestRunContext";
 import {
   mockTestCatalogUrl,
   mockTestResultsUrl,
   mockTestStepUrl,
   parseMockStepIndex,
 } from "@/lib/mockTestRoutes";
-import { initMockSession } from "@/lib/mockTestSessionStorage";
+import { initMockSession, loadMockSession } from "@/lib/mockTestSessionStorage";
 import type { MockTestStructure } from "@/lib/mockTestTypes";
+import { practiceQuestionFrameClass } from "@/lib/practiceNavigation";
 import {
   toListeningQuestion,
   toReadingQuestionFromSection,
   readingQuestionToWritingShape,
   toWritingQuestion,
 } from "@/lib/mockTestTypes";
+import { MockTestRunProvider } from "@/providers/MockTestRunContext";
 import {
   ListeningSection,
   ReadingSection,
   WritingRunner,
 } from "@/pages/PracticeSectionPage";
 import { SpeakingSection } from "@/pages/SpeakingSection";
+
+const MOCK_NAV_ITEMS = mockTestNavigatorItems();
+const TOTAL_STEPS = MOCK_TEST_STEPS.length;
 
 function resolveListeningQuestion(structure: MockTestStructure, step: (typeof MOCK_TEST_STEPS)[number]) {
   const section = structure.sections.listening.find((s) => String(s.part) === step.part);
@@ -50,11 +60,22 @@ function resolveWritingQuestion(structure: MockTestStructure, step: (typeof MOCK
   return section ? toWritingQuestion(section, taskType) : null;
 }
 
+function mockCompletedStepIds(testId: string): Set<string> {
+  const session = loadMockSession(testId);
+  const keys = new Set<string>();
+  for (const k of Object.keys(session?.pendingSections ?? {})) keys.add(k);
+  for (const k of Object.keys(session?.sections ?? {})) keys.add(k);
+  return keys;
+}
+
 export function MockTestWorkspacePage() {
   const { testId = "", stepIndex: stepParam } = useParams<{ testId: string; stepIndex: string }>();
   const navigate = useNavigate();
   const stepIndex = parseMockStepIndex(stepParam);
   const step = MOCK_TEST_STEPS[stepIndex - 1];
+  const stepModule = step?.module ?? "listening";
+  const stepPart = step?.part ?? "1";
+  const [navOpen, setNavOpen] = React.useState(false);
   const [attemptKey, setAttemptKey] = React.useState(0);
 
   const structureQ = useQuery({
@@ -68,13 +89,32 @@ export function MockTestWorkspacePage() {
 
   const structure = structureQ.data;
   const testTitle = structure?.title ?? "Mock Test";
+  const completedIds = React.useMemo(() => mockCompletedStepIds(testId), [testId, stepIndex, attemptKey]);
+  const practicedCount = completedIds.size;
+  const pendingCount = TOTAL_STEPS - practicedCount;
+  const questionFrameClass = practiceQuestionFrameClass(stepModule, stepPart);
+
+  const goStep = React.useCallback(
+    (index: number) => {
+      setAttemptKey((k) => k + 1);
+      navigate(mockTestStepUrl(testId, index));
+    },
+    [navigate, testId],
+  );
+
+  const sectionNavProps = {
+    setIndex: stepIndex,
+    totalSets: TOTAL_STEPS,
+    onPrevious: stepIndex > 1 ? () => goStep(stepIndex - 1) : undefined,
+    onNext: stepIndex < TOTAL_STEPS ? () => goStep(stepIndex + 1) : undefined,
+  };
 
   React.useEffect(() => {
     if (!testId || !step) return;
     initMockSession(testId, testTitle);
     setMockTestContext(testId, step.key);
     return () => setMockTestContext(null, null);
-  }, [testId, step?.key, testTitle]);
+  }, [testId, step, testTitle]);
 
   if (!testId || !step) return <Navigate to={mockTestCatalogUrl()} replace />;
 
@@ -118,11 +158,6 @@ export function MockTestWorkspacePage() {
           ? !writingQuestion?.id
           : false;
 
-  const goStep = (index: number) => {
-    setAttemptKey((k) => k + 1);
-    navigate(mockTestStepUrl(testId, index));
-  };
-
   const renderSection = () => {
     if (missingConfigured) {
       return (
@@ -132,7 +167,7 @@ export function MockTestWorkspacePage() {
             This section has no question set assigned in Admin → Mock Tests. Skip to continue or ask
             your tutor to complete the mock test assembly.
           </p>
-          {stepIndex < MOCK_TEST_STEPS.length ? (
+          {stepIndex < TOTAL_STEPS ? (
             <Button onClick={() => goStep(stepIndex + 1)}>Skip to next section</Button>
           ) : (
             <Button onClick={() => navigate(mockTestResultsUrl(testId))}>View results</Button>
@@ -146,10 +181,10 @@ export function MockTestWorkspacePage() {
         <ListeningSection
           part={step.part}
           questionIndex={1}
-          totalSets={1}
           attemptKey={attemptKey}
           fixedQuestion={listeningQuestion}
           onRetry={() => setAttemptKey((k) => k + 1)}
+          {...sectionNavProps}
         />
       );
     }
@@ -158,35 +193,38 @@ export function MockTestWorkspacePage() {
         <ReadingSection
           part={step.part}
           questionIndex={1}
-          totalSets={1}
           attemptKey={attemptKey}
           fixedQuestion={readingQuestion}
           onRetry={() => setAttemptKey((k) => k + 1)}
+          {...sectionNavProps}
         />
       );
     }
     if (step.module === "writing" && writingQuestion) {
       return (
-        <WritingRunner
-          part={step.part}
-          questionIndex={1}
-          totalSets={1}
-          attemptKey={attemptKey}
-          fixedQuestion={writingQuestion}
-          setIndex={1}
-          onRetry={() => setAttemptKey((k) => k + 1)}
-        />
+        <div className="h-full min-h-0">
+          <WritingRunner
+            part={step.part}
+            questionIndex={1}
+            attemptKey={attemptKey}
+            fixedQuestion={writingQuestion}
+            onRetry={() => setAttemptKey((k) => k + 1)}
+            {...sectionNavProps}
+          />
+        </div>
       );
     }
     if (step.module === "speaking") {
       return (
-        <SpeakingSection
-          part={step.part}
-          questionIndex={1}
-          totalSets={1}
-          attemptKey={attemptKey}
-          onRetry={() => setAttemptKey((k) => k + 1)}
-        />
+        <div className="h-full min-h-0">
+          <SpeakingSection
+            part={step.part}
+            questionIndex={1}
+            attemptKey={attemptKey}
+            onRetry={() => setAttemptKey((k) => k + 1)}
+            {...sectionNavProps}
+          />
+        </div>
       );
     }
     return null;
@@ -194,50 +232,39 @@ export function MockTestWorkspacePage() {
 
   return (
     <MockTestRunProvider testId={testId} sectionKey={step.key} stepIndex={stepIndex} testTitle={testTitle}>
-    <PracticeWorkspaceLayout>
-      <MockTestWorkspaceBar
-        testTitle={testTitle}
-        stepIndex={stepIndex}
-        stepLabel={step.label}
-      />
+      <PracticeWorkspaceLayout>
+        <PracticeWorkspaceBar
+          questionIndex={stepIndex}
+          totalQuestions={TOTAL_STEPS}
+          practicedCount={practicedCount}
+          pendingCount={pendingCount}
+        />
 
-      <div className="flex h-full min-h-0 shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:px-4">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1"
-          disabled={stepIndex <= 1}
-          onClick={() => goStep(stepIndex - 1)}
-        >
-          <ChevronLeft className="size-4" />
-          Previous section
-        </Button>
-        {stepIndex >= MOCK_TEST_STEPS.length ? (
-          <p className="text-xs text-slate-500">Submit the last section to calculate your score.</p>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1 bg-violet-600 hover:bg-violet-700"
-            onClick={() => goStep(stepIndex + 1)}
-          >
-            Next section
-            <ChevronRight className="size-4" />
-          </Button>
-        )}
-      </div>
+        <PracticeNavigatorTab open={navOpen} onOpen={() => setNavOpen(true)} />
 
-      <SpeakingPracticeProvider>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-          <PracticePartSidebar onOpenNavigator={() => {}} />
+        <QuestionNavigatorPanel
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+          sectionLabel={testTitle}
+          partLabel={step.label}
+          questions={MOCK_NAV_ITEMS}
+          currentIndex={stepIndex}
+          completedIds={completedIds}
+          onSelect={goStep}
+        />
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {renderSection()}
+        <SpeakingPracticeProvider>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+            <PracticePartSidebar onOpenNavigator={() => setNavOpen(true)} />
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className={questionFrameClass}>{renderSection()}</div>
+              </div>
+            </div>
           </div>
-        </div>
-      </SpeakingPracticeProvider>
-    </PracticeWorkspaceLayout>
+        </SpeakingPracticeProvider>
+      </PracticeWorkspaceLayout>
     </MockTestRunProvider>
   );
 }
