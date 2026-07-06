@@ -123,12 +123,74 @@ export function MockTestWorkspacePage() {
     navigate(mockTestStepUrl(testId, index));
   };
 
-  const questionFrameClass =
-    step.module === "speaking"
-      ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-      : step.module === "writing" && step.part === "1"
-        ? "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden"
-        : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+  const renderSection = () => {
+    if (missingConfigured) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
+          <p className="text-lg font-semibold text-slate-800">{step.label} not configured</p>
+          <p className="max-w-md text-sm text-slate-500">
+            This section has no question set assigned in Admin → Mock Tests. Skip to continue or ask
+            your tutor to complete the mock test assembly.
+          </p>
+          {stepIndex < MOCK_TEST_STEPS.length ? (
+            <Button onClick={() => goStep(stepIndex + 1)}>Skip to next section</Button>
+          ) : (
+            <Button onClick={() => navigate(mockTestResultsUrl(testId))}>View results</Button>
+          )}
+        </div>
+      );
+    }
+
+    if (step.module === "listening" && listeningQuestion) {
+      return (
+        <ListeningSection
+          part={step.part}
+          questionIndex={1}
+          totalSets={1}
+          attemptKey={attemptKey}
+          fixedQuestion={listeningQuestion}
+          onRetry={() => setAttemptKey((k) => k + 1)}
+        />
+      );
+    }
+    if (step.module === "reading" && readingQuestion) {
+      return (
+        <ReadingSection
+          part={step.part}
+          questionIndex={1}
+          totalSets={1}
+          attemptKey={attemptKey}
+          fixedQuestion={readingQuestion}
+          onRetry={() => setAttemptKey((k) => k + 1)}
+        />
+      );
+    }
+    if (step.module === "writing" && writingQuestion) {
+      return (
+        <WritingRunner
+          part={step.part}
+          questionIndex={1}
+          totalSets={1}
+          attemptKey={attemptKey}
+          fixedQuestion={writingQuestion}
+          setIndex={1}
+          onRetry={() => setAttemptKey((k) => k + 1)}
+        />
+      );
+    }
+    if (step.module === "speaking") {
+      return (
+        <SpeakingSection
+          part={step.part}
+          questionIndex={1}
+          totalSets={1}
+          attemptKey={attemptKey}
+          onRetry={() => setAttemptKey((k) => k + 1)}
+        />
+      );
+    }
+    return null;
+  };
 
   return (
     <MockTestRunProvider testId={testId} sectionKey={step.key} stepIndex={stepIndex} testTitle={testTitle}>
@@ -170,78 +232,8 @@ export function MockTestWorkspacePage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <PracticePartSidebar onOpenNavigator={() => {}} />
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div
-                className={
-                  step.module === "speaking"
-                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-                    : "min-h-0 flex-1 overflow-y-auto"
-                }
-              >
-                {missingConfigured ? (
-                  <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
-                    <p className="text-lg font-semibold text-slate-800">{step.label} not configured</p>
-                    <p className="max-w-md text-sm text-slate-500">
-                      This section has no question set assigned in Admin → Mock Tests. Skip to continue or ask
-                      your tutor to complete the mock test assembly.
-                    </p>
-                    {stepIndex < MOCK_TEST_STEPS.length ? (
-                      <Button onClick={() => goStep(stepIndex + 1)}>Skip to next section</Button>
-                    ) : (
-                      <Button onClick={() => navigate(mockTestResultsUrl(testId))}>View results</Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className={questionFrameClass}>
-                    {step.module === "listening" && listeningQuestion && (
-                      <ListeningSection
-                        part={step.part}
-                        questionIndex={1}
-                        totalSets={1}
-                        attemptKey={attemptKey}
-                        fixedQuestion={listeningQuestion}
-                        onRetry={() => setAttemptKey((k) => k + 1)}
-                      />
-                    )}
-                    {step.module === "reading" && readingQuestion && (
-                      <ReadingSection
-                        part={step.part}
-                        questionIndex={1}
-                        totalSets={1}
-                        attemptKey={attemptKey}
-                        fixedQuestion={readingQuestion}
-                        onRetry={() => setAttemptKey((k) => k + 1)}
-                      />
-                    )}
-                    {step.module === "writing" && writingQuestion && (
-                      <div className="h-full min-h-0">
-                        <WritingRunner
-                          part={step.part}
-                          questionIndex={1}
-                          totalSets={1}
-                          attemptKey={attemptKey}
-                          fixedQuestion={writingQuestion}
-                          setIndex={1}
-                          onRetry={() => setAttemptKey((k) => k + 1)}
-                        />
-                      </div>
-                    )}
-                    {step.module === "speaking" && (
-                      <div className="h-full min-h-0">
-                        <SpeakingSection
-                          part={step.part}
-                          questionIndex={1}
-                          totalSets={1}
-                          attemptKey={attemptKey}
-                          onRetry={() => setAttemptKey((k) => k + 1)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {renderSection()}
           </div>
         </div>
       </SpeakingPracticeProvider>

@@ -36,7 +36,7 @@ export function ListeningPracticeShell({
   const instructions = LISTENING_INSTRUCTIONS[activePart] ?? "";
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-t border-slate-200 bg-white">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-slate-200 bg-white">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
         <div className="flex items-center gap-2">
           <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-emerald-500 sm:flex">
@@ -53,8 +53,8 @@ export function ListeningPracticeShell({
         </div>
       </header>
 
-      <div className="flex h-full min-h-0 flex-1 flex-col md:flex-row">
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white">
           <div className="shrink-0 border-b border-slate-100 px-3 py-2 md:px-4 md:py-2.5">
             <PracticePartHeaderBanner
               module="listening"

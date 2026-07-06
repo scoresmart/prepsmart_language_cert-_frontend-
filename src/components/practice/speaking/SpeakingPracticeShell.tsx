@@ -30,7 +30,7 @@ export function SpeakingPracticeShell({
   footerTop,
 }: Props) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-slate-200 bg-white">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-slate-200 bg-white">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
         <div className="flex items-center gap-2">
           <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 sm:flex">
@@ -47,7 +47,7 @@ export function SpeakingPracticeShell({
         </div>
       </header>
 
-      <div className="flex h-full min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <div className="shrink-0 border-b border-slate-100 px-3 py-2 md:px-4 md:py-2.5">
             <PracticePartHeaderBanner
@@ -62,7 +62,7 @@ export function SpeakingPracticeShell({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
-            <div className="flex h-full w-full min-h-0 flex-col">{children}</div>
+            <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
           </div>
 
           <PracticeBottomBar
