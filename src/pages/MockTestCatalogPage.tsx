@@ -45,6 +45,13 @@ export function MockTestCatalogPage() {
               <Loader2 className="size-5 animate-spin text-blue-400" />
               <span className="text-sm">Loading mock tests…</span>
             </div>
+          ) : q.isError ? (
+            <div className="px-6 py-14 text-center">
+              <p className="font-semibold text-rose-300">Could not load mock tests</p>
+              <p className="mt-2 text-sm text-white/50">
+                {q.error instanceof Error ? q.error.message : "Please check your connection and try again."}
+              </p>
+            </div>
           ) : tests.length === 0 ? (
             <div className="px-6 py-14 text-center">
               <FlaskConical className="mx-auto size-10 text-white/20" />

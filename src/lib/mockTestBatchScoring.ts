@@ -140,6 +140,13 @@ export async function runBatchMockTestScoring(
   const entries = Object.entries(session.pendingSections ?? {});
   const total = entries.length;
 
+  if (total === 0) {
+    session.status = "completed";
+    session.scoredAt = new Date().toISOString();
+    saveMockSession(session);
+    return session;
+  }
+
   for (let i = 0; i < entries.length; i++) {
     const [sectionKey, pending] = entries[i];
     onProgress?.({ current: i + 1, total, sectionLabel: sectionKey });

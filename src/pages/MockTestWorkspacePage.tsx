@@ -131,7 +131,7 @@ export function MockTestWorkspacePage() {
         : "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
 
   return (
-    <MockTestRunProvider testId={testId} sectionKey={step.key} stepIndex={stepIndex}>
+    <MockTestRunProvider testId={testId} sectionKey={step.key} stepIndex={stepIndex} testTitle={testTitle}>
     <PracticeWorkspaceLayout>
       <MockTestWorkspaceBar
         testTitle={testTitle}

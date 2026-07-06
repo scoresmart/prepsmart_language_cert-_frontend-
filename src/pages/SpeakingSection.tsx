@@ -385,7 +385,6 @@ function SpeakingRunner({
 
       scoringInFlightRef.current = true;
       setSubmitted(true);
-      setScoringPhase("scoring");
       setSpeakingScore(null);
       setScoringError(null);
 
@@ -404,11 +403,12 @@ function SpeakingRunner({
         recordingQuestionId: question.id,
       });
       if (deferred) {
-        setSubmitted(true);
-        setScoringPhase("done");
+        setScoringPhase("idle");
         scoringInFlightRef.current = false;
         return;
       }
+
+      setScoringPhase("scoring");
 
       let uploadBlob: Blob;
       try {

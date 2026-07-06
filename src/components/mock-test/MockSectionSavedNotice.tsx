@@ -9,7 +9,7 @@ export function MockSectionSavedNotice({ isLastStep }: { isLastStep?: boolean })
         <p className="mt-0.5 text-emerald-800/90">
           {isLastStep
             ? "Calculating your mock test score…"
-            : "Your answers are saved and locked. Scores and correct answers will appear on the results page after you finish the mock test."}
+            : "Your answers are saved and locked. Use the Next section button at the top to continue — scores appear on the results page after you finish the mock test."}
         </p>
       </div>
     </div>

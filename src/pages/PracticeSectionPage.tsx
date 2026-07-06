@@ -655,14 +655,12 @@ function Reading2Runner({
   const [submitted, setSubmitted] = React.useState(false);
   const [activeGap, setActiveGap] = React.useState<string | null>(null);
 
-  if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
-
-  const gaps = Object.keys(data.correctMapping).sort((a, b) => Number(a) - Number(b));
-  const sentenceLabels = data.answers.map((_, i) => String.fromCharCode(65 + i));
-  const score = gaps.filter((g) => selections[g] === data.correctMapping[g]).length;
-  const allAnswered = gaps.length > 0 && gaps.every((g) => selections[g]);
+  const gaps = data ? Object.keys(data.correctMapping).sort((a, b) => Number(a) - Number(b)) : [];
+  const sentenceLabels = data ? data.answers.map((_, i) => String.fromCharCode(65 + i)) : [];
+  const score = data ? gaps.filter((g) => selections[g] === data.correctMapping[g]).length : 0;
+  const allAnswered = data ? gaps.length > 0 && gaps.every((g) => selections[g]) : false;
   const usedLabels = new Set(Object.values(selections));
-  const passageParts = data.passage.split(/\[(\d+)\]/g);
+  const passageParts = data ? data.passage.split(/\[(\d+)\]/g) : [];
 
   const assignSentence = (gapNum: string, label: string) => {
     if (submitted) return;
@@ -684,7 +682,7 @@ function Reading2Runner({
       questionType: "reading_part_2",
       questionSetId: question.id,
       selections,
-      correctMapping: data.correctMapping,
+      correctMapping: data?.correctMapping ?? {},
     }),
     () =>
       persistAttempt(
@@ -700,7 +698,7 @@ function Reading2Runner({
   const showAnswers = mockShowAnswers(submitted, deferResults);
   const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
   const objectiveResult = React.useMemo(() => {
-    if (!submitted || deferResults) return null;
+    if (!submitted || deferResults || !data) return null;
     return buildObjectiveResult(
       gaps.map((g) => ({
         label: `Gap ${g}`,
@@ -710,7 +708,9 @@ function Reading2Runner({
       })),
       "gaps filled correctly",
     );
-  }, [submitted, deferResults, gaps, selections, data.correctMapping]);
+  }, [submitted, deferResults, gaps, selections, data]);
+
+  if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
 
   const leftPanel = (
     <div className="rounded border border-slate-300 bg-white p-4 md:p-5">
@@ -828,11 +828,9 @@ function Reading3Runner({
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
   const [submitted, setSubmitted] = React.useState(false);
 
-  if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
-
-  const score = data.statements.filter((s, i) => answers[i] === s.correctAnswer).length;
-  const allAnswered = data.statements.length > 0 && data.statements.every((_, i) => answers[i]);
-  const textOptions = data.passages.map((p) => p.label);
+  const score = data ? data.statements.filter((s, i) => answers[i] === s.correctAnswer).length : 0;
+  const allAnswered = data ? data.statements.length > 0 && data.statements.every((_, i) => answers[i]) : false;
+  const textOptions = data ? data.passages.map((p) => p.label) : [];
 
   const { handleSubmit, isSubmitting, deferResults, isLastStep } = useMockDeferredPracticeSubmit(
     setSubmitted,
@@ -841,7 +839,7 @@ function Reading3Runner({
       questionType: "reading_part_3",
       questionSetId: question.id,
       answers,
-      statements: data.statements,
+      statements: data?.statements ?? [],
     }),
     () =>
       persistAttempt(
@@ -849,7 +847,7 @@ function Reading3Runner({
           question_type: "reading_part_3",
           question_set_id: question.id,
           score,
-          total: data.statements.length,
+          total: data?.statements.length ?? 0,
         },
         onAttemptSaved,
       ),
@@ -857,7 +855,7 @@ function Reading3Runner({
   const showAnswers = mockShowAnswers(submitted, deferResults);
   const { open: resultsOpen, setOpen: setResultsOpen } = useReadingResultsDialog(submitted, deferResults);
   const objectiveResult = React.useMemo(() => {
-    if (!submitted || deferResults) return null;
+    if (!submitted || deferResults || !data) return null;
     return buildObjectiveResult(
       data.statements.map((stmt, i) => ({
         label: `Statement ${i + 1}`,
@@ -867,7 +865,9 @@ function Reading3Runner({
       })),
       "statements matched correctly",
     );
-  }, [submitted, deferResults, data.statements, answers]);
+  }, [submitted, deferResults, data, answers]);
+
+  if (!data) return <p className="py-8 text-center text-sm italic text-slate-400">Invalid question data.</p>;
 
   const leftPanel = (
     <div className="space-y-4">
