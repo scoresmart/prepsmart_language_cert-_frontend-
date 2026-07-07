@@ -23,6 +23,7 @@ export function ExaminerAudioBox({
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = React.useState(false);
   const [ended, setEnded] = React.useState(false);
+  const [loadError, setLoadError] = React.useState(false);
 
   const setPlayState = React.useCallback(
     (value: boolean) => {
@@ -34,6 +35,7 @@ export function ExaminerAudioBox({
 
   React.useEffect(() => {
     setEnded(false);
+    setLoadError(false);
     setPlayState(false);
     if (!src || !autoPlay) return;
     const el = audioRef.current;
@@ -78,6 +80,10 @@ export function ExaminerAudioBox({
         className="hidden"
         onPlay={() => setPlayState(true)}
         onPause={() => setPlayState(false)}
+        onError={() => {
+          setLoadError(true);
+          setPlayState(false);
+        }}
         onEnded={() => {
           setPlayState(false);
           setEnded(true);
@@ -93,13 +99,24 @@ export function ExaminerAudioBox({
         <Headphones className={compact ? "size-4 sm:size-5" : "size-7"} />
       </div>
       <p className={cn("font-semibold text-slate-800", compact ? "mt-2 text-xs sm:text-sm" : "mt-4 text-sm")}>
-        {playing ? "Examiner is speaking" : ended ? "Examiner finished" : "Listen to the examiner"}
+        {loadError
+          ? "Examiner audio unavailable"
+          : playing
+            ? "Examiner is speaking"
+            : ended
+              ? "Examiner finished"
+              : "Listen to the examiner"}
       </p>
+      {loadError && (
+        <p className={cn("text-rose-600", compact ? "mt-1 text-[10px] sm:text-xs" : "mt-1 text-xs")}>
+          This question&apos;s audio file could not be loaded. Ask your tutor to re-upload it in Admin.
+        </p>
+      )}
       {!compact && (
         <p className="mt-1 text-xs text-slate-500">Please listen carefully before you record your answer.</p>
       )}
       <AudioWaveBars active={playing} compact={compact} className={compact ? "mt-2" : "mt-5"} colorClass="bg-cyan-500" />
-      {!playing && !ended && (
+      {!playing && !ended && !loadError && (
         <button
           type="button"
           onClick={() => void audioRef.current?.play()}
