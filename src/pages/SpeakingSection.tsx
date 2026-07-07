@@ -21,6 +21,13 @@ import {
 
 import { fetchPracticeQuestions, type SpeakingQuestion } from "@/lib/practiceQuestions";
 
+import type { SpeakingSet } from "@/lib/api";
+import {
+  flattenPartPrompts,
+  flatPromptToPracticeQuestion,
+  type SpeakingSetPracticeQuestion,
+} from "@/lib/speakingSetStructure";
+
 import {
 
   getSpeakingPartTiming,
@@ -36,7 +43,7 @@ import { useSpeakingPracticeStateOptional, SpeakingSidebarPanel } from "@/compon
 import { SpeakingQuestionPanel } from "@/components/practice/speaking/SpeakingQuestionPanel";
 
 import { PracticeScoringDialog } from "@/components/practice/PracticeScoringDialog";
-import { PracticeTaskFooterActions } from "@/components/practice/PracticeActionButtons";
+import { PracticeTaskFooterActions, PracticeNavButton } from "@/components/practice/PracticeActionButtons";
 import { useSubmitLock } from "@/hooks/useSubmitLock";
 
 import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
@@ -116,17 +123,54 @@ function SpeakingRunner({
 
 }: SectionProps) {
 
+  const [promptIndex, setPromptIndex] = React.useState(0);
+  const [promptRevision, setPromptRevision] = React.useState(0);
+
   const q = useQuery({
 
-    queryKey: ["speaking-runner", part, questionIndex],
+    queryKey: ["speaking-runner", part, questionIndex, promptIndex],
 
     queryFn: async () => {
 
       const items = await fetchPracticeQuestions("speaking", part);
 
-      const raw = items[questionIndex - 1]?.raw as SpeakingQuestion | undefined;
+      const raw = items[questionIndex - 1]?.raw;
 
-      return raw ? normalizeSpeakingQuestion(raw, questionIndex) : undefined;
+      if (!raw) return undefined;
+
+      if ("structure" in raw && (raw as SpeakingSet).structure) {
+
+        const set = raw as SpeakingSet;
+
+        const prompts = flattenPartPrompts(part, set.structure);
+
+        const prompt = prompts[promptIndex];
+
+        if (!prompt) return undefined;
+
+        return {
+
+          mode: "set" as const,
+
+          set,
+
+          prompts,
+
+          question: flatPromptToPracticeQuestion(set, part, prompt, prompts.length),
+
+        };
+
+      }
+
+      const legacy = raw as SpeakingQuestion;
+
+      return {
+
+        mode: "legacy" as const,
+
+        question: normalizeSpeakingQuestion(legacy, questionIndex),
+
+      };
 
     },
 
@@ -136,7 +180,15 @@ function SpeakingRunner({
 
 
 
-  const question = q.data;
+  const question = q.data?.mode === "set" ? q.data.question : q.data?.question;
+
+  const speakingSet = q.data?.mode === "set" ? q.data.set : null;
+
+  const prompts = q.data?.mode === "set" ? q.data.prompts : [];
+
+  const hasMorePrompts = q.data?.mode === "set" && promptIndex < prompts.length - 1;
+
+  const setQuestion = question as SpeakingSetPracticeQuestion | undefined;
 
   const partTiming = React.useMemo(
     () => getSpeakingPartTiming(part, question?.level),
@@ -264,6 +316,16 @@ function SpeakingRunner({
 
   React.useEffect(() => {
 
+    setPromptIndex(0);
+
+    setPromptRevision(0);
+
+  }, [questionIndex, attemptKey, part]);
+
+
+
+  React.useEffect(() => {
+
     if (!question) return;
 
     setPhase("waiting");
@@ -293,7 +355,7 @@ function SpeakingRunner({
 
     setMicError(null);
 
-  }, [question?.id, attemptKey, stopMic, partTiming.prepSeconds, partTiming.recordSeconds]);
+  }, [question?.id, attemptKey, promptRevision, stopMic, partTiming.prepSeconds, partTiming.recordSeconds]);
 
   React.useEffect(() => {
     if (submitted && !deferResults && scoringPhase !== "idle") {
@@ -392,10 +454,12 @@ function SpeakingRunner({
       const playback = await getLocalRecording(question.id);
       setRecordingUrl(playback);
 
+      const attemptSetId = speakingSet?.id ?? question.id;
+
       const deferred = await completeMockSectionSubmit({
         kind: "speaking",
         questionType: `speaking_part_${part}`,
-        questionSetId: question.id,
+        questionSetId: attemptSetId,
         part,
         level: question.level,
         title: question.title,
@@ -422,7 +486,7 @@ function SpeakingRunner({
       const attemptId = await persistAttempt(
         {
           question_type: `speaking_part_${part}`,
-          question_set_id: question.id,
+          question_set_id: attemptSetId,
           score: 0,
           total: 50,
         },
@@ -449,7 +513,7 @@ function SpeakingRunner({
         scoringInFlightRef.current = false;
       }
     },
-    [question, part, onAttemptSaved],
+    [question, part, onAttemptSaved, speakingSet?.id],
   );
 
   const handleRecordingComplete = React.useCallback(
@@ -461,6 +525,18 @@ function SpeakingRunner({
     },
     [],
   );
+
+  const advanceToNextPrompt = () => {
+
+    if (!hasMorePrompts) return;
+
+    setPromptIndex((i) => i + 1);
+
+    setPromptRevision((r) => r + 1);
+
+  };
+
+
 
   const handleSubmit = () => {
     if (!question || submitted || isSubmitting || !recordingBlob || !playbackStarted) return;
@@ -516,7 +592,11 @@ function SpeakingRunner({
 
   const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob) && playbackStarted;
 
-  const footer = (
+  const footer = submitted && hasMorePrompts ? (
+    <PracticeNavButton onClick={advanceToNextPrompt} className="gap-2">
+      Next question in set
+    </PracticeNavButton>
+  ) : (
     <PracticeTaskFooterActions
       canSubmit={canSubmit}
       isSubmitting={isSubmitting}
@@ -571,11 +651,19 @@ function SpeakingRunner({
         question={question}
         questionIndex={questionIndex}
         totalSets={totalSets}
-        attemptKey={attemptKey}
+        attemptKey={attemptKey + promptRevision}
         phase={phase}
         prepareSecondsLeft={prepareLeft}
         recordSecondsLeft={recordLeft}
         maxDuration={partTiming.recordSeconds}
+        promptLabel={setQuestion?.prompt?.promptLabel}
+        promptKind={setQuestion?.prompt?.kind}
+        readAloudText={
+          setQuestion?.prompt?.kind === "read_aloud" ? setQuestion.prompt.read_text : undefined
+        }
+        presentationTopic={
+          setQuestion?.prompt?.kind === "presentation" ? setQuestion.prompt.topic : undefined
+        }
         audioStream={micStream}
         micReady={micReady}
         micError={micError}

@@ -1,4 +1,4 @@
-import { api, type ListeningQuestion, type ReadingQuestion, type SpeakingQuestion, type WritingQuestion } from "@/lib/api";
+import { api, type ListeningQuestion, type ReadingQuestion, type SpeakingQuestion, type SpeakingSet, type WritingQuestion } from "@/lib/api";
 import { LISTENING_PARTS } from "@/lib/listeningInstructions";
 import { READING_PARTS } from "@/lib/readingInstructions";
 import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
@@ -13,7 +13,7 @@ export type PracticeQuestionItem = {
   id: string;
   index: number;
   title: string;
-  raw: WritingQuestion | ListeningQuestion | SpeakingQuestion | ReadingQuestion;
+  raw: WritingQuestion | ListeningQuestion | SpeakingQuestion | ReadingQuestion | SpeakingSet;
 };
 
 const READING_TASK_MAP: Record<string, string> = {
@@ -153,6 +153,17 @@ export async function fetchPracticeQuestions(
   }
 
   if (section === "speaking") {
+    const setsRes = await api.speaking.sets.list();
+    const sets = setsRes.data ?? [];
+    if (sets.length > 0) {
+      return sets.map((s, i) => ({
+        id: s.id,
+        index: i + 1,
+        title: s.title,
+        raw: s,
+      }));
+    }
+
     const partNum = parseInt(part, 10) || 1;
     const res = await api.speaking.list({ part_number: partNum });
     const rows = res.data ?? [];

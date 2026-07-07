@@ -2,6 +2,7 @@ import { Bookmark } from "lucide-react";
 import { ExaminerAudioBox } from "@/components/practice/speaking/ExaminerAudioBox";
 import { UserRecordingBox, type RecordingPhase } from "@/components/practice/speaking/UserRecordingBox";
 import type { NormalizedSpeakingQuestion } from "@/lib/speakingQuestionStructure";
+import type { SpeakingPromptKind } from "@/lib/speakingSetStructure";
 import { cn } from "@/lib/utils";
 
 const SUPABASE_URL =
@@ -24,6 +25,10 @@ type Props = {
   prepareSecondsLeft: number;
   recordSecondsLeft: number;
   maxDuration: number;
+  promptLabel?: string;
+  promptKind?: SpeakingPromptKind;
+  readAloudText?: string;
+  presentationTopic?: string;
   audioStream?: MediaStream | null;
   micReady?: boolean;
   micError?: string | null;
@@ -46,6 +51,10 @@ export function SpeakingQuestionPanel({
   prepareSecondsLeft,
   recordSecondsLeft,
   maxDuration,
+  promptLabel,
+  promptKind,
+  readAloudText,
+  presentationTopic,
   audioStream,
   micReady,
   micError,
@@ -71,8 +80,13 @@ export function SpeakingQuestionPanel({
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 sm:text-xs">
-                Q <span className="font-bold text-slate-900">{questionIndex}</span>/{totalSets}
+                Set <span className="font-bold text-slate-900">{questionIndex}</span>/{totalSets}
               </span>
+              {promptLabel && (
+                <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-800 sm:text-xs">
+                  {promptLabel}
+                </span>
+              )}
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize sm:text-xs",
@@ -86,9 +100,32 @@ export function SpeakingQuestionPanel({
           </div>
           <Bookmark className="size-3.5 shrink-0 text-slate-300" />
         </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap sm:text-sm">
+        <p className="mt-1 line-clamp-4 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap sm:text-sm">
           {question.content}
         </p>
+        {readAloudText && (
+          <div className="mt-2 rounded-md border border-violet-200 bg-violet-50/80 px-2.5 py-2 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 sm:text-xs">
+              Read aloud text
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap sm:text-sm">
+              {readAloudText}
+            </p>
+          </div>
+        )}
+        {presentationTopic && (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/80 px-2.5 py-2 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 sm:text-xs">
+              Presentation topic
+            </p>
+            <p className="mt-1 text-xs font-medium text-slate-800 sm:text-sm">{presentationTopic}</p>
+          </div>
+        )}
+        {promptKind === "follow_up" && (
+          <p className="mt-2 text-[10px] font-medium text-cyan-700 sm:text-xs">
+            Answer the examiner&apos;s follow-up question below after listening to the audio.
+          </p>
+        )}
         {imageSrc && (
           <img src={imageSrc} alt="" className="mt-1.5 max-h-16 w-full rounded-md object-contain" />
         )}

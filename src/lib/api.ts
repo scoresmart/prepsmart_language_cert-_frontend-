@@ -194,6 +194,17 @@ export interface SpeakingQuestion {
   created_at: string;
 }
 
+export interface SpeakingSet {
+  id: string;
+  title: string;
+  level: string;
+  sort_order: number;
+  is_published: boolean;
+  structure: import("./speakingSetStructure").SpeakingSetStructure;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MockTest {
   id: string;
   title: string;
@@ -738,6 +749,41 @@ export const api = {
         "/questions/speaking/upload-audio",
         formData,
       );
+    },
+    sets: {
+      list: () => request<ApiResponse<SpeakingSet[]>>("/questions/speaking/sets"),
+      listAll: () =>
+        request<ApiResponse<SpeakingSet[]>>("/questions/speaking/sets?include_all=true"),
+      get: (id: string) => request<ApiResponse<SpeakingSet>>(`/questions/speaking/sets/${id}`),
+      create: (body: {
+        title: string;
+        level?: string;
+        sort_order?: number;
+        is_published?: boolean;
+        structure: SpeakingSet["structure"];
+      }) =>
+        request<ApiResponse<SpeakingSet>>("/questions/speaking/sets", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      update: (
+        id: string,
+        body: Partial<{
+          title: string;
+          level: string;
+          sort_order: number;
+          is_published: boolean;
+          structure: SpeakingSet["structure"];
+        }>,
+      ) =>
+        request<ApiResponse<SpeakingSet>>(`/questions/speaking/sets/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        }),
+      delete: (id: string) =>
+        request<ApiResponse<{ message: string }>>(`/questions/speaking/sets/${id}`, {
+          method: "DELETE",
+        }),
     },
   },
 
