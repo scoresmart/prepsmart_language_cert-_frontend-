@@ -27,6 +27,7 @@ type Props = {
   maxDuration: number;
   promptLabel?: string;
   promptKind?: SpeakingPromptKind;
+  requiresRecording?: boolean;
   readAloudText?: string;
   presentationTopic?: string;
   audioStream?: MediaStream | null;
@@ -53,6 +54,7 @@ export function SpeakingQuestionPanel({
   maxDuration,
   promptLabel,
   promptKind,
+  requiresRecording = true,
   readAloudText,
   presentationTopic,
   audioStream,
@@ -131,34 +133,47 @@ export function SpeakingQuestionPanel({
         )}
       </div>
 
-      {/* Examiner on top, your recording below — equal height, always visible */}
-      <div className="grid min-h-0 flex-1 grid-rows-2 gap-2">
+      {/* Examiner on top, your recording below — equal height when recording is required */}
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 gap-2",
+          requiresRecording ? "grid-rows-2" : "grid-rows-1",
+        )}
+      >
         <ExaminerAudioBox
           key={`${question.id}-${attemptKey}-examiner`}
-          src={question.audio_url}
+          src={question.audio_url || null}
           autoPlay
           compact
           className="min-h-0"
           onPlayingChange={onExaminerPlaying}
           onEnded={onStartPreparing}
         />
-        <UserRecordingBox
-          phase={phase}
-          prepareSecondsLeft={prepareSecondsLeft}
-          recordSecondsLeft={recordSecondsLeft}
-          maxDuration={maxDuration}
-          audioStream={audioStream}
-          micReady={micReady}
-          micError={micError}
-          compact
-          className="min-h-0"
-          onStartRecording={onStartRecording}
-          onRecordingComplete={onRecordingComplete}
-          onRetryMic={onRetryMic}
-          onRegisterStop={onRegisterRecordingStop}
-          recordingBlob={recordingBlob}
-          onPlaybackStarted={onPlaybackStarted}
-        />
+        {requiresRecording ? (
+          <UserRecordingBox
+            phase={phase}
+            prepareSecondsLeft={prepareSecondsLeft}
+            recordSecondsLeft={recordSecondsLeft}
+            maxDuration={maxDuration}
+            audioStream={audioStream}
+            micReady={micReady}
+            micError={micError}
+            compact
+            className="min-h-0"
+            onStartRecording={onStartRecording}
+            onRecordingComplete={onRecordingComplete}
+            onRetryMic={onRetryMic}
+            onRegisterStop={onRegisterRecordingStop}
+            recordingBlob={recordingBlob}
+            onPlaybackStarted={onPlaybackStarted}
+          />
+        ) : (
+          <div className="flex min-h-0 items-center justify-center rounded-xl border border-dashed border-cyan-200 bg-cyan-50/40 px-3 py-4 text-center">
+            <p className="text-xs font-medium text-cyan-800 sm:text-sm">
+              Listen to the examiner, then tap Continue to proceed.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

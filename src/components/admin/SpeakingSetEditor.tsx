@@ -1,5 +1,3 @@
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,14 +5,16 @@ import { AudioUploadDropzone } from "@/components/admin/AudioUploadDropzone";
 import { api } from "@/lib/api";
 import {
   emptySpeakingSetStructure,
-  stripSpeakingAudioRef,
+  normalizeSpeakingSetStructure,
+  stripStructureAudioRefs,
+  SPEAKING_SET_EXAM_NAME,
   type SpeakingSet,
-  type SpeakingSetPrompt,
   type SpeakingSetStructure,
+  type SpeakingTextAudio,
+  type SpeakingTimedPrompt,
 } from "@/lib/speakingSetStructure";
-import { SPEAKING_PART_FOCUS, SPEAKING_PART_TITLES } from "@/lib/speakingInstructions";
 
-type SetForm = {
+export type SetForm = {
   title: string;
   level: string;
   sort_order: number;
@@ -28,7 +28,7 @@ type Props = {
   disabled?: boolean;
 };
 
-function PromptAudioField({
+function AudioField({
   label,
   value,
   onChange,
@@ -55,288 +55,476 @@ function PromptAudioField({
   );
 }
 
-function PromptFields({
-  prompt,
+function TextAudioBlock({
+  textLabel,
+  audioLabel,
+  value,
   onChange,
   disabled,
-  showContent = true,
-  contentLabel = "Instructions / situation",
-  audioLabel = "Examiner audio",
+  rows = 3,
 }: {
-  prompt: SpeakingSetPrompt;
-  onChange: (p: SpeakingSetPrompt) => void;
+  textLabel: string;
+  audioLabel: string;
+  value: SpeakingTextAudio;
+  onChange: (v: SpeakingTextAudio) => void;
   disabled?: boolean;
-  showContent?: boolean;
-  contentLabel?: string;
-  audioLabel?: string;
+  rows?: number;
 }) {
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Title</Label>
-        <Input
-          value={prompt.title}
-          onChange={(e) => onChange({ ...prompt, title: e.target.value })}
+        <Label className="text-xs">{textLabel}</Label>
+        <Textarea
+          rows={rows}
+          value={value.text}
+          onChange={(e) => onChange({ ...value, text: e.target.value })}
           disabled={disabled}
+          className="text-xs"
         />
       </div>
-      {showContent && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">{contentLabel}</Label>
-          <Textarea
-            rows={4}
-            value={prompt.content ?? ""}
-            onChange={(e) => onChange({ ...prompt, content: e.target.value })}
-            disabled={disabled}
-            className="text-xs"
-          />
-        </div>
-      )}
-      <PromptAudioField
+      <AudioField
         label={audioLabel}
-        value={prompt.audio_url ?? ""}
-        onChange={(path) => onChange({ ...prompt, audio_url: path })}
+        value={value.audio_url ?? ""}
+        onChange={(path) => onChange({ ...value, audio_url: path || null })}
         disabled={disabled}
       />
     </div>
   );
 }
 
+function TimedPromptBlock({
+  title,
+  textLabel,
+  audioLabel,
+  timerLabel,
+  value,
+  onChange,
+  disabled,
+  rows = 3,
+}: {
+  title: string;
+  textLabel: string;
+  audioLabel: string;
+  timerLabel: string;
+  value: SpeakingTimedPrompt;
+  onChange: (v: SpeakingTimedPrompt) => void;
+  disabled?: boolean;
+  rows?: number;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="text-xs font-semibold text-slate-700">{title}</p>
+      <div className="space-y-1.5">
+        <Label className="text-xs">{textLabel}</Label>
+        <Textarea
+          rows={rows}
+          value={value.text}
+          onChange={(e) => onChange({ ...value, text: e.target.value })}
+          disabled={disabled}
+          className="text-xs"
+        />
+      </div>
+      <AudioField
+        label={audioLabel}
+        value={value.audio_url ?? ""}
+        onChange={(path) => onChange({ ...value, audio_url: path || null })}
+        disabled={disabled}
+      />
+      <div className="space-y-1.5 max-w-[180px]">
+        <Label className="text-xs">{timerLabel}</Label>
+        <Input
+          type="number"
+          min={5}
+          value={value.timer_seconds}
+          onChange={(e) =>
+            onChange({ ...value, timer_seconds: Math.max(5, parseInt(e.target.value, 10) || 5) })
+          }
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="border-b border-slate-200 pb-2">
+      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+      <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
 export function SpeakingSetEditor({ value, onChange, disabled }: Props) {
-  const { structure } = value;
+  const structure = normalizeSpeakingSetStructure(value.structure);
 
   const updateStructure = (patch: Partial<SpeakingSetStructure>) => {
     onChange({ ...value, structure: { ...structure, ...patch } });
   };
 
-  const updatePart1 = (index: number, prompt: SpeakingSetPrompt) => {
-    const part1 = [...structure.part1];
-    part1[index] = prompt;
-    updateStructure({ part1 });
-  };
-
-  const updatePart2 = (index: number, prompt: SpeakingSetPrompt) => {
-    const part2 = [...structure.part2];
-    part2[index] = prompt;
-    updateStructure({ part2 });
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label>Set title *</Label>
-          <Input
-            placeholder="e.g. Academic Speaking Set 1"
-            value={value.title}
-            onChange={(e) => onChange({ ...value, title: e.target.value })}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>CEFR level</Label>
-          <Input
-            value={value.level}
-            onChange={(e) => onChange({ ...value, level: e.target.value })}
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Sort order</Label>
-          <Input
-            type="number"
-            value={value.sort_order}
-            onChange={(e) => onChange({ ...value, sort_order: parseInt(e.target.value, 10) || 0 })}
-            disabled={disabled}
-          />
-        </div>
-      </div>
+    <div className="space-y-8">
+      {/* Basic Set Details */}
+      <section className="space-y-4">
+        <SectionHeader title="Basic Set Details" hint="Title, exam name, status, disclaimer, and general introduction." />
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="font-semibold text-slate-800">
-            Part 1 — {SPEAKING_PART_TITLES["1"]} (5 questions)
-          </h3>
-          <p className="text-xs text-slate-500">{SPEAKING_PART_FOCUS["1"]}</p>
-        </div>
-        {structure.part1.map((prompt, i) => (
-          <div key={i}>
-            <p className="mb-1.5 text-xs font-medium text-slate-600">Question {i + 1}</p>
-            <PromptFields
-              prompt={prompt}
-              onChange={(p) => updatePart1(i, p)}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Set Title *</Label>
+            <Input
+              placeholder="Set 1 / Set 2 / Set 3"
+              value={value.title}
+              onChange={(e) => onChange({ ...value, title: e.target.value })}
               disabled={disabled}
-              contentLabel="Examiner question (shown to student)"
             />
           </div>
-        ))}
-      </section>
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="font-semibold text-slate-800">
-            Part 2 — {SPEAKING_PART_TITLES["2"]} (2 role plays)
-          </h3>
-          <p className="text-xs text-slate-500">{SPEAKING_PART_FOCUS["2"]}</p>
-        </div>
-        {structure.part2.map((prompt, i) => (
-          <div key={i}>
-            <p className="mb-1.5 text-xs font-medium text-slate-600">Role play {i + 1}</p>
-            <PromptFields
-              prompt={prompt}
-              onChange={(p) => updatePart2(i, p)}
-              disabled={disabled}
-              contentLabel="Role play situation (shown to student)"
-            />
-          </div>
-        ))}
-      </section>
-
-      <section className="space-y-3">
-        <div>
-          <h3 className="font-semibold text-slate-800">Part 3 — {SPEAKING_PART_TITLES["3"]}</h3>
-          <p className="text-xs text-slate-500">{SPEAKING_PART_FOCUS["3"]}</p>
-        </div>
-        <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
-          <p className="text-xs font-semibold text-violet-900">Read aloud</p>
           <div className="space-y-1.5">
-            <Label className="text-xs">Read-aloud text * (shown to student)</Label>
+            <Label>Exam Name</Label>
+            <Input value={structure.exam_name || SPEAKING_SET_EXAM_NAME} disabled />
+            <p className="text-[11px] text-slate-400">Fixed: LanguageCert Academic Speaking</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>CEFR level</Label>
+            <Input
+              value={value.level}
+              onChange={(e) => onChange({ ...value, level: e.target.value })}
+              disabled={disabled}
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Disclaimer Text</Label>
+            <Input
+              value={structure.disclaimer}
+              onChange={(e) => updateStructure({ disclaimer: e.target.value })}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+
+        <TextAudioBlock
+          textLabel="General Examiner Introduction Text"
+          audioLabel="General Examiner Introduction Audio (plays before Part 1)"
+          value={structure.general_intro}
+          onChange={(general_intro) => updateStructure({ general_intro })}
+          disabled={disabled}
+          rows={4}
+        />
+      </section>
+
+      {/* Part 1 */}
+      <section className="space-y-4">
+        <SectionHeader
+          title="Part 1 – Questions"
+          hint={structure.part1.student_instruction}
+        />
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default Student Instruction</Label>
+          <Textarea
+            rows={2}
+            value={structure.part1.student_instruction}
+            onChange={(e) =>
+              updateStructure({ part1: { ...structure.part1, student_instruction: e.target.value } })
+            }
+            disabled={disabled}
+            className="text-xs"
+          />
+        </div>
+
+        <TextAudioBlock
+          textLabel="Part 1 Examiner Instruction Text"
+          audioLabel="Part 1 Examiner Instruction Audio"
+          value={structure.part1.examiner_instruction}
+          onChange={(examiner_instruction) =>
+            updateStructure({ part1: { ...structure.part1, examiner_instruction } })
+          }
+          disabled={disabled}
+        />
+
+        {structure.part1.questions.map((q, i) => (
+          <TimedPromptBlock
+            key={i}
+            title={`Question ${i + 1}`}
+            textLabel={`Question ${i + 1} Text`}
+            audioLabel={`Question ${i + 1} Audio`}
+            timerLabel={`Question ${i + 1} Answer Timer (seconds)`}
+            value={q}
+            onChange={(next) => {
+              const questions = [...structure.part1.questions];
+              questions[i] = next;
+              updateStructure({ part1: { ...structure.part1, questions } });
+            }}
+            disabled={disabled}
+          />
+        ))}
+      </section>
+
+      {/* Part 2 */}
+      <section className="space-y-4">
+        <SectionHeader title="Part 2 – Role Play" hint={structure.part2.student_instruction} />
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default Student Instruction</Label>
+          <Textarea
+            rows={2}
+            value={structure.part2.student_instruction}
+            onChange={(e) =>
+              updateStructure({ part2: { ...structure.part2, student_instruction: e.target.value } })
+            }
+            disabled={disabled}
+            className="text-xs"
+          />
+        </div>
+
+        <TextAudioBlock
+          textLabel="Part 2 Examiner Instruction Text"
+          audioLabel="Part 2 Examiner Instruction Audio"
+          value={structure.part2.examiner_instruction}
+          onChange={(examiner_instruction) =>
+            updateStructure({ part2: { ...structure.part2, examiner_instruction } })
+          }
+          disabled={disabled}
+        />
+
+        {structure.part2.role_plays.map((q, i) => (
+          <TimedPromptBlock
+            key={i}
+            title={`Role Play ${i + 1}`}
+            textLabel={`Role Play ${i + 1} Situation Text`}
+            audioLabel={`Role Play ${i + 1} Audio`}
+            timerLabel={`Role Play ${i + 1} Speaking Timer (seconds)`}
+            value={q}
+            onChange={(next) => {
+              const role_plays = [...structure.part2.role_plays];
+              role_plays[i] = next;
+              updateStructure({ part2: { ...structure.part2, role_plays } });
+            }}
+            disabled={disabled}
+            rows={4}
+          />
+        ))}
+      </section>
+
+      {/* Part 3 */}
+      <section className="space-y-4">
+        <SectionHeader title="Part 3 – Read Aloud" hint={structure.part3.student_instruction} />
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default Student Instruction</Label>
+          <Textarea
+            rows={2}
+            value={structure.part3.student_instruction}
+            onChange={(e) =>
+              updateStructure({ part3: { ...structure.part3, student_instruction: e.target.value } })
+            }
+            disabled={disabled}
+            className="text-xs"
+          />
+        </div>
+
+        <TextAudioBlock
+          textLabel="Part 3 Examiner Instruction Text"
+          audioLabel="Part 3 Examiner Instruction Audio"
+          value={structure.part3.examiner_instruction}
+          onChange={(examiner_instruction) =>
+            updateStructure({ part3: { ...structure.part3, examiner_instruction } })
+          }
+          disabled={disabled}
+        />
+
+        <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Read Aloud Text *</Label>
             <Textarea
               rows={5}
-              value={structure.part3.readAloud.read_text}
+              value={structure.part3.read_aloud_text}
               onChange={(e) =>
-                updateStructure({
-                  part3: {
-                    ...structure.part3,
-                    readAloud: { ...structure.part3.readAloud, read_text: e.target.value },
-                  },
-                })
+                updateStructure({ part3: { ...structure.part3, read_aloud_text: e.target.value } })
               }
               disabled={disabled}
               className="text-xs"
             />
           </div>
-          <PromptFields
-            prompt={structure.part3.readAloud}
-            onChange={(p) =>
-              updateStructure({
-                part3: { ...structure.part3, readAloud: { ...p, read_text: structure.part3.readAloud.read_text } },
-              })
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Preparation Timer (seconds)</Label>
+              <Input
+                type="number"
+                min={5}
+                value={structure.part3.preparation_timer}
+                onChange={(e) =>
+                  updateStructure({
+                    part3: {
+                      ...structure.part3,
+                      preparation_timer: Math.max(5, parseInt(e.target.value, 10) || 5),
+                    },
+                  })
+                }
+                disabled={disabled}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Reading Recording Timer (seconds)</Label>
+              <Input
+                type="number"
+                min={5}
+                value={structure.part3.reading_timer}
+                onChange={(e) =>
+                  updateStructure({
+                    part3: {
+                      ...structure.part3,
+                      reading_timer: Math.max(5, parseInt(e.target.value, 10) || 5),
+                    },
+                  })
+                }
+                disabled={disabled}
+              />
+            </div>
+          </div>
+        </div>
+
+        <TextAudioBlock
+          textLabel="Read Aloud Start Instruction Text"
+          audioLabel="Read Aloud Start Instruction Audio"
+          value={structure.part3.read_aloud_start}
+          onChange={(read_aloud_start) =>
+            updateStructure({ part3: { ...structure.part3, read_aloud_start } })
+          }
+          disabled={disabled}
+        />
+
+        <TimedPromptBlock
+          title="Follow-up Question"
+          textLabel="Follow-up Question Text"
+          audioLabel="Follow-up Question Audio"
+          timerLabel="Follow-up Answer Timer (seconds)"
+          value={structure.part3.follow_up}
+          onChange={(follow_up) => updateStructure({ part3: { ...structure.part3, follow_up } })}
+          disabled={disabled}
+        />
+      </section>
+
+      {/* Part 4 */}
+      <section className="space-y-4">
+        <SectionHeader title="Part 4 – Presentation" hint={structure.part4.student_instruction} />
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default Student Instruction</Label>
+          <Textarea
+            rows={2}
+            value={structure.part4.student_instruction}
+            onChange={(e) =>
+              updateStructure({ part4: { ...structure.part4, student_instruction: e.target.value } })
             }
             disabled={disabled}
-            showContent
-            contentLabel="Examiner instructions"
+            className="text-xs"
           />
         </div>
 
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-700">Follow-up questions (shown to student)</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            disabled={disabled}
-            onClick={() =>
-              updateStructure({
-                part3: {
-                  ...structure.part3,
-                  followUps: [
-                    ...structure.part3.followUps,
-                    { title: `Follow-up ${structure.part3.followUps.length + 1}`, content: "", audio_url: null },
-                  ],
-                },
-              })
-            }
-          >
-            <Plus className="size-3" /> Add follow-up
-          </Button>
-        </div>
-        {structure.part3.followUps.map((prompt, i) => (
-          <div key={i} className="relative">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-600">Follow-up {i + 1}</p>
-              {structure.part3.followUps.length > 1 && (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    const followUps = structure.part3.followUps.filter((_, idx) => idx !== i);
-                    updateStructure({ part3: { ...structure.part3, followUps } });
-                  }}
-                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              )}
-            </div>
-            <PromptFields
-              prompt={prompt}
-              onChange={(p) => {
-                const followUps = [...structure.part3.followUps];
-                followUps[i] = p;
-                updateStructure({ part3: { ...structure.part3, followUps } });
-              }}
-              disabled={disabled}
-              contentLabel="Follow-up question (shown to student)"
-            />
-          </div>
-        ))}
-      </section>
+        <TextAudioBlock
+          textLabel="Part 4 Examiner Instruction Text"
+          audioLabel="Part 4 Examiner Instruction Audio"
+          value={structure.part4.examiner_instruction}
+          onChange={(examiner_instruction) =>
+            updateStructure({ part4: { ...structure.part4, examiner_instruction } })
+          }
+          disabled={disabled}
+        />
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="font-semibold text-slate-800">Part 4 — {SPEAKING_PART_TITLES["4"]}</h3>
-          <p className="text-xs text-slate-500">{SPEAKING_PART_FOCUS["4"]}</p>
-        </div>
-        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-          <p className="text-xs font-semibold text-amber-900">Presentation</p>
+        <TextAudioBlock
+          textLabel="Presentation Topic Text *"
+          audioLabel="Topic Audio"
+          value={structure.part4.presentation_topic}
+          onChange={(presentation_topic) =>
+            updateStructure({ part4: { ...structure.part4, presentation_topic } })
+          }
+          disabled={disabled}
+        />
+
+        <TextAudioBlock
+          textLabel="Preparation Start Text"
+          audioLabel="Preparation Start Audio"
+          value={structure.part4.preparation_start}
+          onChange={(preparation_start) =>
+            updateStructure({ part4: { ...structure.part4, preparation_start } })
+          }
+          disabled={disabled}
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">Presentation topic (shown to student)</Label>
+            <Label className="text-xs">Preparation Timer (seconds)</Label>
             <Input
-              value={structure.part4.presentation.topic ?? ""}
+              type="number"
+              min={5}
+              value={structure.part4.preparation_timer}
               onChange={(e) =>
                 updateStructure({
                   part4: {
                     ...structure.part4,
-                    presentation: { ...structure.part4.presentation, topic: e.target.value },
+                    preparation_timer: Math.max(5, parseInt(e.target.value, 10) || 5),
                   },
                 })
               }
               disabled={disabled}
             />
           </div>
-          <PromptFields
-            prompt={structure.part4.presentation}
-            onChange={(p) =>
-              updateStructure({
-                part4: {
-                  ...structure.part4,
-                  presentation: { ...p, topic: structure.part4.presentation.topic },
-                },
-              })
-            }
-            disabled={disabled}
-            contentLabel="Structure / outline (shown to student)"
-          />
-        </div>
-
-        <p className="text-xs font-semibold text-slate-700">Follow-up questions (2 required, shown to student)</p>
-        {structure.part4.followUps.map((prompt, i) => (
-          <div key={i}>
-            <p className="mb-1.5 text-xs font-medium text-slate-600">Follow-up {i + 1}</p>
-            <PromptFields
-              prompt={prompt}
-              onChange={(p) => {
-                const followUps = [...structure.part4.followUps] as [SpeakingSetPrompt, SpeakingSetPrompt];
-                followUps[i] = p;
-                updateStructure({ part4: { ...structure.part4, followUps } });
-              }}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Presentation Speaking Timer (seconds)</Label>
+            <Input
+              type="number"
+              min={5}
+              value={structure.part4.speaking_timer}
+              onChange={(e) =>
+                updateStructure({
+                  part4: {
+                    ...structure.part4,
+                    speaking_timer: Math.max(5, parseInt(e.target.value, 10) || 5),
+                  },
+                })
+              }
               disabled={disabled}
-              contentLabel="Follow-up question (shown to student)"
             />
           </div>
+        </div>
+
+        <TextAudioBlock
+          textLabel="Presentation Start Text"
+          audioLabel="Presentation Start Audio"
+          value={structure.part4.presentation_start}
+          onChange={(presentation_start) =>
+            updateStructure({ part4: { ...structure.part4, presentation_start } })
+          }
+          disabled={disabled}
+        />
+
+        {structure.part4.follow_ups.map((q, i) => (
+          <TimedPromptBlock
+            key={i}
+            title={`Follow-up Question ${i + 1}`}
+            textLabel={`Follow-up Question ${i + 1} Text`}
+            audioLabel={`Follow-up Question ${i + 1} Audio`}
+            timerLabel={`Follow-up Question ${i + 1} Answer Timer (seconds)`}
+            value={q}
+            onChange={(next) => {
+              const follow_ups = [...structure.part4.follow_ups];
+              follow_ups[i] = next;
+              updateStructure({ part4: { ...structure.part4, follow_ups } });
+            }}
+            disabled={disabled}
+          />
         ))}
+
+        <TextAudioBlock
+          textLabel="Ending Examiner Text"
+          audioLabel="Ending Examiner Audio"
+          value={structure.part4.ending}
+          onChange={(ending) => updateStructure({ part4: { ...structure.part4, ending } })}
+          disabled={disabled}
+        />
       </section>
     </div>
   );
@@ -353,31 +541,11 @@ export function speakingSetToForm(set?: SpeakingSet | null): SetForm {
     };
   }
 
-  const structure = JSON.parse(JSON.stringify(set.structure)) as SpeakingSetStructure;
-  const strip = (p: SpeakingSetPrompt) => ({
-    ...p,
-    audio_url: stripSpeakingAudioRef(p.audio_url ?? ""),
-  });
-
   return {
     title: set.title,
     level: set.level,
     sort_order: set.sort_order,
     is_published: set.is_published,
-    structure: {
-      part1: structure.part1.map(strip),
-      part2: structure.part2.map(strip),
-      part3: {
-        readAloud: {
-          ...strip(structure.part3.readAloud),
-          read_text: structure.part3.readAloud.read_text ?? "",
-        },
-        followUps: structure.part3.followUps.map(strip),
-      },
-      part4: {
-        presentation: strip(structure.part4.presentation),
-        followUps: structure.part4.followUps.map(strip) as [SpeakingSetPrompt, SpeakingSetPrompt],
-      },
-    },
+    structure: stripStructureAudioRefs(normalizeSpeakingSetStructure(set.structure)),
   };
 }

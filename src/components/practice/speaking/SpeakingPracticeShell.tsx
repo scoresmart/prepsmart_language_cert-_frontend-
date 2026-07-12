@@ -2,13 +2,18 @@ import type { ReactNode } from "react";
 import { Mic, Sparkles } from "lucide-react";
 import { partBadge, PracticePartHeaderBanner } from "@/components/practice/PracticePartHeaderBanner";
 import { PracticeBottomBar } from "@/components/practice/PracticeActionButtons";
+import { SpeakingSetProgressBar } from "@/components/practice/speaking/SpeakingSetProgressBar";
 import { SPEAKING_INSTRUCTIONS, SPEAKING_PART_TITLES, getSpeakingInstruction } from "@/lib/speakingInstructions";
+import type { SpeakingSetProgress } from "@/lib/speakingSetStructure";
 
 type Props = {
   activePart: string;
   level?: string;
   setIndex?: number;
   totalSets?: number;
+  setProgress?: SpeakingSetProgress;
+  setTitle?: string;
+  promptLabel?: string;
   onPrevious?: () => void;
   onNext?: () => void;
   sidebar?: ReactNode;
@@ -22,6 +27,9 @@ export function SpeakingPracticeShell({
   level,
   setIndex = 1,
   totalSets = 1,
+  setProgress,
+  setTitle,
+  promptLabel,
   onPrevious,
   onNext,
   sidebar,
@@ -46,6 +54,14 @@ export function SpeakingPracticeShell({
           </div>
         </div>
       </header>
+
+      {setProgress ? (
+        <SpeakingSetProgressBar
+          progress={setProgress}
+          promptLabel={promptLabel}
+          setTitle={setTitle}
+        />
+      ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">

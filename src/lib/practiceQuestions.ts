@@ -153,8 +153,13 @@ export async function fetchPracticeQuestions(
   }
 
   if (section === "speaking") {
-    const setsRes = await api.speaking.sets.list();
-    const sets = setsRes.data ?? [];
+    let sets: SpeakingSet[] = [];
+    try {
+      const setsRes = await api.speaking.sets.list();
+      sets = setsRes.data ?? [];
+    } catch {
+      // Fall back to legacy per-part questions if sets API is unavailable.
+    }
     if (sets.length > 0) {
       return sets.map((s, i) => ({
         id: s.id,

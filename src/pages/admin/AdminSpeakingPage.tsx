@@ -3,8 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Mic, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +13,10 @@ import {
 import { toast } from "sonner";
 import { api, type SpeakingSet } from "@/lib/api";
 import { SpeakingSetEditor, speakingSetToForm } from "@/components/admin/SpeakingSetEditor";
-import { validateSpeakingSetStructure } from "@/lib/speakingSetStructure";
-import { SPEAKING_PART_FOCUS } from "@/lib/speakingInstructions";
+import {
+  normalizeSpeakingSetStructure,
+  validateSpeakingSetStructure,
+} from "@/lib/speakingSetStructure";
 
 export function AdminSpeakingPage() {
   const qc = useQueryClient();
@@ -36,17 +36,21 @@ export function AdminSpeakingPage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const validationError = validateSpeakingSetStructure(form.structure);
-      if (validationError) throw new Error(validationError);
+    mutationFn: async (publish: boolean) => {
       if (!form.title.trim()) throw new Error("Set title is required");
+
+      const structure = normalizeSpeakingSetStructure(form.structure);
+      if (publish) {
+        const validationError = validateSpeakingSetStructure(structure);
+        if (validationError) throw new Error(validationError);
+      }
 
       const payload = {
         title: form.title.trim(),
         level: form.level,
         sort_order: form.sort_order,
-        is_published: form.is_published,
-        structure: form.structure,
+        is_published: publish,
+        structure,
       };
 
       if (editRow) {
@@ -55,14 +59,14 @@ export function AdminSpeakingPage() {
         await api.speaking.sets.create(payload);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, publish) => {
       qc.invalidateQueries({ queryKey: ["admin", "speaking-sets"] });
       qc.invalidateQueries({ queryKey: ["speaking-runner"] });
       qc.invalidateQueries({ queryKey: ["practice", "speaking"] });
       setDialogOpen(false);
       setEditRow(null);
       setForm(speakingSetToForm());
-      toast.success(editRow ? "Set updated" : "Set created");
+      toast.success(publish ? "Set published" : "Draft saved");
     },
     onError: (err: Error) => toast.error(err.message || "Could not save set"),
   });
@@ -78,7 +82,13 @@ export function AdminSpeakingPage() {
   });
 
   const togglePublish = useMutation({
-    mutationFn: async ({ id, val }: { id: string; val: boolean }) => {
+    mutationFn: async ({ id, val, row }: { id: string; val: boolean; row: SpeakingSet }) => {
+      if (val) {
+        const validationError = validateSpeakingSetStructure(
+          normalizeSpeakingSetStructure(row.structure),
+        );
+        if (validationError) throw new Error(validationError);
+      }
       await api.speaking.sets.update(id, { is_published: val });
     },
     onSuccess: () => {
@@ -105,6 +115,11 @@ export function AdminSpeakingPage() {
     setDialogOpen(true);
   };
 
+  const setSummary = (row: SpeakingSet) => {
+    const s = normalizeSpeakingSetStructure(row.structure);
+    return `${s.exam_name} · ${row.is_published ? "Published" : "Draft"} · Level ${row.level}`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -115,24 +130,23 @@ export function AdminSpeakingPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-800">Speaking Sets</h1>
             <p className="text-sm text-slate-500">
-              One set = Part 1 (5 Qs) + Part 2 (2 role plays) + Part 3 (read aloud + follow-ups) + Part 4
-              (presentation + 2 follow-ups)
+              LanguageCert Academic Speaking — full set with intro, Parts 1–4, timers, and examiner audio
             </p>
           </div>
         </div>
         <Button onClick={openAdd} className="gap-2">
           <Plus className="size-4" />
-          Create set
+          Add New Speaking Set
         </Button>
       </div>
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-900">
         <p className="font-medium">Set structure (LanguageCert Academic)</p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-blue-800/90">
-          <li>Part 1: {SPEAKING_PART_FOCUS["1"]}</li>
-          <li>Part 2: {SPEAKING_PART_FOCUS["2"]}</li>
-          <li>Part 3: {SPEAKING_PART_FOCUS["3"]}</li>
-          <li>Part 4: {SPEAKING_PART_FOCUS["4"]}</li>
+          <li>General intro + Part 1: 5 questions (30s each)</li>
+          <li>Part 2: 2 role plays (60s each)</li>
+          <li>Part 3: Read aloud (30s prep + 60s read) + follow-up (45s)</li>
+          <li>Part 4: Presentation (60s prep + 120s speak) + 2 follow-ups (45s) + ending</li>
         </ul>
       </div>
 
@@ -152,9 +166,9 @@ export function AdminSpeakingPage() {
         <div className="rounded-xl border border-dashed bg-slate-50 py-16 text-center">
           <Layers className="mx-auto size-10 text-slate-300" />
           <p className="mt-3 font-medium text-slate-700">No speaking sets yet</p>
-          <p className="mt-1 text-sm text-slate-500">Create your first full 4-part speaking set.</p>
+          <p className="mt-1 text-sm text-slate-500">Create your first LanguageCert Academic speaking set.</p>
           <Button className="mt-4" onClick={openAdd}>
-            Create set
+            Add New Speaking Set
           </Button>
         </div>
       ) : (
@@ -166,16 +180,24 @@ export function AdminSpeakingPage() {
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-slate-800">{row.title}</p>
-                <p className="text-xs text-slate-500">
-                  Level {row.level} · 5 + 2 + {1 + row.structure.part3.followUps.length} +{" "}
-                  {1 + row.structure.part4.followUps.length} prompts
-                </p>
+                <p className="text-xs text-slate-500">{setSummary(row)}</p>
               </div>
-              <span className="text-xs uppercase text-slate-400">{row.level}</span>
-              <Switch
-                checked={row.is_published}
-                onCheckedChange={(val) => togglePublish.mutate({ id: row.id, val })}
-              />
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                  row.is_published ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {row.is_published ? "Published" : "Draft"}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  togglePublish.mutate({ id: row.id, val: !row.is_published, row })
+                }
+                className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+              >
+                {row.is_published ? "Unpublish" : "Publish"}
+              </button>
               <button
                 type="button"
                 onClick={() => openEdit(row)}
@@ -198,27 +220,26 @@ export function AdminSpeakingPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editRow ? "Edit speaking set" : "Create speaking set"}</DialogTitle>
+            <DialogTitle>{editRow ? "Edit Speaking Set" : "Add New Speaking Set"}</DialogTitle>
           </DialogHeader>
           <SpeakingSetEditor
             value={form}
             onChange={setForm}
             disabled={saveMutation.isPending}
           />
-          <div className="flex items-center gap-3 border-t pt-4">
-            <Switch
-              checked={form.is_published}
-              onCheckedChange={(val) => setForm({ ...form, is_published: val })}
-              disabled={saveMutation.isPending}
-            />
-            <Label>Published (visible to students)</Label>
-          </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : editRow ? "Save set" : "Create set"}
+            <Button
+              variant="secondary"
+              onClick={() => saveMutation.mutate(false)}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? "Saving…" : "Save Draft"}
+            </Button>
+            <Button onClick={() => saveMutation.mutate(true)} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Publish Set"}
             </Button>
           </DialogFooter>
         </DialogContent>
