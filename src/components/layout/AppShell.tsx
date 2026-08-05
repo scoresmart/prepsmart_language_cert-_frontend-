@@ -220,14 +220,18 @@ export function AppShell() {
             <Menu className="size-5" />
           </button>
 
-          <Link to="/dashboard" className="flex shrink-0 items-center gap-2 transition-transform hover:scale-105">
-            <img src="/logo.png" alt="PrepSmart LC" className="size-8 object-contain" />
+          <Link to="/dashboard" className="flex shrink-0 items-center gap-2.5 transition-transform hover:scale-105">
+            <img
+              src="/logo.png"
+              alt="PrepSmart LC"
+              className="size-8 object-contain [filter:drop-shadow(0_0_0_transparent)]"
+            />
             <span className="hidden font-bold tracking-wide text-white sm:inline">
               PREPSMART LC
             </span>
           </Link>
 
-          <nav className="hidden flex-1 items-center justify-center gap-2 lg:flex">
+          <nav className="hidden flex-1 items-center justify-center gap-3 lg:flex">
             <NavLink to="/dashboard" className={topNavClass}>Home</NavLink>
             <LCPracticeDropdown align="center" />
           </nav>

@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { Mic, Sparkles } from "lucide-react";
-import { partBadge, PracticePartHeaderBanner } from "@/components/practice/PracticePartHeaderBanner";
-import { PracticeBottomBar } from "@/components/practice/PracticeActionButtons";
+import { PRACTICE_CONTENT_FRAME_FILL, PracticeBottomBar } from "@/components/practice/PracticeActionButtons";
 import { SpeakingSetProgressBar } from "@/components/practice/speaking/SpeakingSetProgressBar";
-import { SPEAKING_INSTRUCTIONS, SPEAKING_PART_TITLES, getSpeakingInstruction } from "@/lib/speakingInstructions";
+import { SPEAKING_PART_TITLES } from "@/lib/speakingInstructions";
 import type { SpeakingSetProgress } from "@/lib/speakingSetStructure";
 
 type Props = {
@@ -24,7 +23,6 @@ type Props = {
 
 export function SpeakingPracticeShell({
   activePart,
-  level,
   setIndex = 1,
   totalSets = 1,
   setProgress,
@@ -37,65 +35,61 @@ export function SpeakingPracticeShell({
   footer,
   footerTop,
 }: Props) {
+  const partTitle = SPEAKING_PART_TITLES[activePart];
+
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-slate-200 bg-white">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
-        <div className="flex items-center gap-2">
-          <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 sm:flex">
-            <Sparkles className="size-3.5 text-white" />
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-slate-100">
+      <div className={PRACTICE_CONTENT_FRAME_FILL}>
+        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
+          <div className="flex items-center gap-2">
+            <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 sm:flex">
+              <Sparkles className="size-3.5 text-white" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Mic className="hidden size-3.5 text-blue-400 sm:block" aria-hidden />
+              <div>
+                <p className="hidden text-[10px] font-semibold uppercase tracking-widest text-blue-400 sm:block">
+                  ScoreSmart LC
+                </p>
+                <p className="text-xs font-bold text-white sm:text-sm">
+                  Speaking — Q {setIndex}/{totalSets}
+                  {partTitle ? <span className="font-medium text-white/70"> · {partTitle}</span> : null}
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="hidden text-[10px] font-semibold uppercase tracking-widest text-blue-400 sm:block">
-              PrepSmart LC
-            </p>
-            <p className="text-xs font-bold text-white sm:text-sm">
-              Speaking — Q {setIndex}/{totalSets}
-            </p>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {setProgress ? (
-        <SpeakingSetProgressBar
-          progress={setProgress}
-          promptLabel={promptLabel}
-          setTitle={setTitle}
-        />
-      ) : null}
-
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-          <div className="shrink-0 border-b border-slate-100 px-3 py-2 md:px-4 md:py-2.5">
-            <PracticePartHeaderBanner
-              module="speaking"
-              partLabel={`Speaking Part ${activePart}`}
-              title={SPEAKING_PART_TITLES[activePart] ?? "Speaking Practice"}
-              instructions={level ? getSpeakingInstruction(activePart, level) : SPEAKING_INSTRUCTIONS[activePart]}
-              badge={partBadge("speaking", activePart)}
-              icon={Mic}
-              compact
-            />
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
-            <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
-          </div>
-
-          <PracticeBottomBar
-            left={footer}
-            top={footerTop}
-            onPrevious={onPrevious}
-            onNext={onNext}
-            setIndex={setIndex}
-            totalSets={totalSets}
+        {setProgress ? (
+          <SpeakingSetProgressBar
+            progress={setProgress}
+            promptLabel={promptLabel}
+            setTitle={setTitle}
           />
-        </main>
-
-        {sidebar ? (
-          <div className="hidden shrink-0 border-l border-slate-200 bg-slate-50 md:flex md:w-72 lg:w-80">
-            {sidebar}
-          </div>
         ) : null}
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pt-4 md:p-3 md:pt-5">
+              <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
+            </div>
+
+            <PracticeBottomBar
+              center={footer}
+              top={footerTop}
+              onPrevious={onPrevious}
+              onNext={onNext}
+              setIndex={setIndex}
+              totalSets={totalSets}
+            />
+          </main>
+
+          {sidebar ? (
+            <div className="hidden shrink-0 border-l border-slate-200 bg-slate-50 md:flex md:w-72 lg:w-80">
+              {sidebar}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

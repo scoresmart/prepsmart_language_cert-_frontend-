@@ -13,6 +13,13 @@ type Props = {
   resetKey?: string;
 };
 
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export function ListeningAudioPlayer({
   src,
   className,
@@ -23,6 +30,8 @@ export function ListeningAudioPlayer({
   const [phase, setPhase] = React.useState<Phase>("preparing");
   const [prepLeft, setPrepLeft] = React.useState(prepSeconds);
   const [volume, setVolume] = React.useState(1);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [duration, setDuration] = React.useState(0);
 
   const startPlaybackWhenReady = React.useCallback(() => {
     const el = audioRef.current;
@@ -50,6 +59,8 @@ export function ListeningAudioPlayer({
   React.useEffect(() => {
     setPhase("preparing");
     setPrepLeft(prepSeconds);
+    setCurrentTime(0);
+    setDuration(0);
     const el = audioRef.current;
     if (el) {
       el.pause();
@@ -68,6 +79,14 @@ export function ListeningAudioPlayer({
     return () => window.clearTimeout(timer);
   }, [phase, prepLeft, startPlaybackWhenReady]);
 
+  const syncDuration = React.useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (Number.isFinite(el.duration) && el.duration > 0) {
+      setDuration(el.duration);
+    }
+  }, []);
+
   const toggle = () => {
     const el = audioRef.current;
     if (!el) return;
@@ -79,8 +98,20 @@ export function ListeningAudioPlayer({
     }
   };
 
+  const seekTo = (next: number) => {
+    const el = audioRef.current;
+    if (!el || !Number.isFinite(duration) || duration <= 0) return;
+    const clamped = Math.min(Math.max(0, next), duration);
+    el.currentTime = clamped;
+    setCurrentTime(clamped);
+    if (phase === "ended" && clamped < duration) {
+      setPhase("paused");
+    }
+  };
+
   const isPreparing = phase === "preparing";
   const isPlaying = phase === "playing";
+  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
     <div className={cn("flex flex-col items-center gap-3 py-5", className)}>
@@ -89,11 +120,23 @@ export function ListeningAudioPlayer({
         ref={audioRef}
         src={src}
         preload="auto"
+        onLoadedMetadata={syncDuration}
+        onDurationChange={syncDuration}
+        onTimeUpdate={() => {
+          const el = audioRef.current;
+          if (el) setCurrentTime(el.currentTime);
+        }}
         onPlay={() => setPhase("playing")}
         onPause={() => {
           setPhase((current) => (current === "preparing" ? current : "paused"));
         }}
-        onEnded={() => setPhase("ended")}
+        onEnded={() => {
+          setPhase("ended");
+          const el = audioRef.current;
+          if (el && Number.isFinite(el.duration)) {
+            setCurrentTime(el.duration);
+          }
+        }}
         className="hidden"
       />
 
@@ -128,15 +171,35 @@ export function ListeningAudioPlayer({
                   : "Paused"}
             </p>
             <AudioWaveBars active={isPlaying} className="mt-4" colorClass="bg-cyan-500" />
+
+            <div className="mt-5 space-y-1.5">
+              <input
+                type="range"
+                min={0}
+                max={duration > 0 ? duration : 1}
+                step={0.1}
+                value={Math.min(currentTime, duration || 0)}
+                disabled={duration <= 0}
+                aria-label="Audio progress"
+                onChange={(e) => seekTo(parseFloat(e.target.value))}
+                className="h-2 w-full cursor-pointer accent-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  background: `linear-gradient(to right, #0891b2 ${progress}%, #e2e8f0 ${progress}%)`,
+                }}
+              />
+              <div className="flex items-center justify-between text-xs font-medium tabular-nums text-slate-600">
+                <span>{formatTime(currentTime)}</span>
+                <span>{duration > 0 ? formatTime(duration) : "--:--"}</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={toggle}
-              disabled={phase === "ended"}
               aria-label={isPlaying ? "Pause audio" : "Play audio"}
-              className="flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-emerald-500 text-white shadow-lg shadow-cyan-500/30 transition hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-emerald-500 text-white shadow-lg shadow-cyan-500/30 transition hover:scale-105 active:scale-95"
             >
               {isPlaying ? (
                 <Pause className="size-5 fill-current" />
@@ -152,6 +215,7 @@ export function ListeningAudioPlayer({
                 max={1}
                 step={0.05}
                 value={volume}
+                aria-label="Volume"
                 onChange={(e) => {
                   const v = parseFloat(e.target.value);
                   setVolume(v);
@@ -169,6 +233,7 @@ export function ListeningAudioPlayer({
                 const el = audioRef.current;
                 if (!el) return;
                 el.currentTime = 0;
+                setCurrentTime(0);
                 void el.play().then(() => setPhase("playing")).catch(() => setPhase("paused"));
               }}
               className="text-xs font-medium text-cyan-700 hover:text-cyan-900"

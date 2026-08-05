@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronDown, Sparkles, X, ArrowLeft } from "lucide-react";
+import { ChevronDown, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LC_SECTIONS } from "@/lib/lcPracticeMenu";
 import { moduleUrl } from "@/lib/practiceRoutes";
@@ -244,7 +244,6 @@ export function LCPracticeDropdown({ align = "center", triggerVariant = "nav", c
           {triggerVariant === "cta" && (
             <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
           )}
-          {triggerVariant === "workspace" && <ArrowLeft className="relative size-4 shrink-0" />}
           <span className="relative">LC Practice</span>
           <ChevronDown
             className={cn("relative size-4 transition-transform duration-300", isOpen && "rotate-180")}

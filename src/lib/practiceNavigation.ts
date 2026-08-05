@@ -6,39 +6,32 @@ export function practiceQuestionUrl(section: string, questionIndex: number, part
   return workspaceUrl(section, part, questionIndex);
 }
 
-
-
 export function parseQuestionIndex(raw?: string): number {
-
   const n = parseInt(raw ?? "1", 10);
-
   return Number.isFinite(n) && n >= 1 ? n : 1;
-
 }
-
-
 
 export function difficultyLabel(index: number): "Easy" | "Medium" | "Hard" {
-
   const labels = ["Easy", "Medium", "Hard"] as const;
-
   return labels[(index - 1) % 3];
-
 }
 
-/** Shared workspace content frame — practice + mock test. */
+/**
+ * Reading/listening: natural height so questions stay mostly visible (page scrolls).
+ * Writing/speaking: tall pane for split/editor layouts.
+ */
 export function practiceQuestionFrameClass(module: string, part: string): string {
   if (module === "speaking") {
-    return "flex h-[calc(100dvh-3.5rem)] min-h-0 shrink-0 flex-col overflow-hidden";
+    return "flex min-h-[min(720px,calc(100dvh-3.5rem-12rem))] w-full flex-col";
   }
   if (module === "writing" && part === "1") {
-    return "flex h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col overflow-hidden";
+    return "flex min-h-[min(680px,calc(100dvh-3.5rem-12rem))] w-full flex-col";
   }
-  return "flex min-h-[calc(100dvh-3.5rem-3.25rem)] min-w-0 shrink-0 flex-col";
+  if (module === "writing") {
+    return "flex min-h-[min(640px,calc(100dvh-3.5rem-12rem))] w-full flex-col";
+  }
+  // reading / listening — grow with content, avoid nested scroll squeeze
+  return "flex w-full flex-col";
 }
 
-
-
 export { partQuestionsUrl as practiceQuestionsHubUrl } from "@/lib/practiceRoutes";
-
-

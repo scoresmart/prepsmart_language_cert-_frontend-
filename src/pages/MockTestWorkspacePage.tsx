@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
 import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab";
-import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
 import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
@@ -254,9 +253,7 @@ export function MockTestWorkspacePage() {
         />
 
         <SpeakingPracticeProvider>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-            <PracticePartSidebar onOpenNavigator={() => setNavOpen(true)} />
-
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className={questionFrameClass}>{renderSection()}</div>

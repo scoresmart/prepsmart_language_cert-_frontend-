@@ -4,7 +4,6 @@ import { Loader2 } from "lucide-react";
 import { PracticeWorkspaceLayout } from "@/components/layout/PracticeWorkspaceLayout";
 import { PracticeMyAttemptsSection } from "@/components/practice/PracticeMyAttemptsSection";
 import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab";
-import { PracticePartSidebar } from "@/components/practice/PracticePartSidebar";
 import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
@@ -182,88 +181,66 @@ export function PracticeQuestionPage() {
       />
 
       <SpeakingPracticeProvider>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-          <PracticePartSidebar onOpenNavigator={() => setNavOpen(true)} />
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {module === "speaking" ? (
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className={questionFrameClass}>
-                  <div className="h-full min-h-0">
-                    <SpeakingSection
-                      part={part}
-                      questionIndex={clampedIndex}
-                      totalSets={total}
-                      attemptKey={attemptKey}
-                      onRetry={() => setAttemptKey((k) => k + 1)}
-                      onPrevious={() => goTo(clampedIndex - 1)}
-                      onNext={() => goTo(clampedIndex + 1)}
-                      onAttemptSaved={handleAttemptSaved}
-                    />
-                  </div>
-                </div>
-                <PracticeMyAttemptsSection
-                  module={module}
-                  questions={questions}
-                  attempts={attemptsQ.data ?? []}
-                  currentQuestionId={currentQuestion?.id}
-                  onSelectQuestion={goTo}
-                />
-              </div>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className={questionFrameClass}>
-                  {module === "listening" && (
-                  <ListeningSection
-                    part={part}
-                    questionIndex={clampedIndex}
-                    totalSets={total}
-                    attemptKey={attemptKey}
-                    onRetry={() => setAttemptKey((k) => k + 1)}
-                    onPrevious={() => goTo(clampedIndex - 1)}
-                    onNext={() => goTo(clampedIndex + 1)}
-                    onAttemptSaved={handleAttemptSaved}
-                  />
-                )}
-                {module === "reading" && (
-                  <ReadingSection
-                    part={part}
-                    questionIndex={clampedIndex}
-                    totalSets={total}
-                    attemptKey={attemptKey}
-                    onRetry={() => setAttemptKey((k) => k + 1)}
-                    onPrevious={() => goTo(clampedIndex - 1)}
-                    onNext={() => goTo(clampedIndex + 1)}
-                    onAttemptSaved={handleAttemptSaved}
-                  />
-                )}
-                {module === "writing" && (
-                  <div className="h-full min-h-0">
-                    <WritingRunner
-                      part={part}
-                      questionIndex={clampedIndex}
-                      totalSets={total}
-                      attemptKey={attemptKey}
-                      onRetry={() => setAttemptKey((k) => k + 1)}
-                      setIndex={clampedIndex}
-                      onPrevious={() => goTo(clampedIndex - 1)}
-                      onNext={() => goTo(clampedIndex + 1)}
-                      onAttemptSaved={handleAttemptSaved}
-                    />
-                  </div>
-                )}
-                </div>
-
-                <PracticeMyAttemptsSection
-                  module={module}
-                  questions={questions}
-                  attempts={attemptsQ.data ?? []}
-                  currentQuestionId={currentQuestion?.id}
-                  onSelectQuestion={goTo}
-                />
-              </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={questionFrameClass}>
+            {module === "speaking" && (
+              <SpeakingSection
+                part={part}
+                questionIndex={clampedIndex}
+                totalSets={total}
+                attemptKey={attemptKey}
+                onRetry={() => setAttemptKey((k) => k + 1)}
+                onPrevious={() => goTo(clampedIndex - 1)}
+                onNext={() => goTo(clampedIndex + 1)}
+                onAttemptSaved={handleAttemptSaved}
+              />
+            )}
+            {module === "listening" && (
+              <ListeningSection
+                part={part}
+                questionIndex={clampedIndex}
+                totalSets={total}
+                attemptKey={attemptKey}
+                onRetry={() => setAttemptKey((k) => k + 1)}
+                onPrevious={() => goTo(clampedIndex - 1)}
+                onNext={() => goTo(clampedIndex + 1)}
+                onAttemptSaved={handleAttemptSaved}
+              />
+            )}
+            {module === "reading" && (
+              <ReadingSection
+                part={part}
+                questionIndex={clampedIndex}
+                totalSets={total}
+                attemptKey={attemptKey}
+                onRetry={() => setAttemptKey((k) => k + 1)}
+                onPrevious={() => goTo(clampedIndex - 1)}
+                onNext={() => goTo(clampedIndex + 1)}
+                onAttemptSaved={handleAttemptSaved}
+              />
+            )}
+            {module === "writing" && (
+              <WritingRunner
+                part={part}
+                questionIndex={clampedIndex}
+                totalSets={total}
+                attemptKey={attemptKey}
+                onRetry={() => setAttemptKey((k) => k + 1)}
+                setIndex={clampedIndex}
+                onPrevious={() => goTo(clampedIndex - 1)}
+                onNext={() => goTo(clampedIndex + 1)}
+                onAttemptSaved={handleAttemptSaved}
+              />
             )}
           </div>
+
+          <PracticeMyAttemptsSection
+            module={module}
+            questions={questions}
+            attempts={attemptsQ.data ?? []}
+            currentQuestionId={currentQuestion?.id}
+            onSelectQuestion={goTo}
+          />
         </div>
       </SpeakingPracticeProvider>
     </PracticeWorkspaceLayout>

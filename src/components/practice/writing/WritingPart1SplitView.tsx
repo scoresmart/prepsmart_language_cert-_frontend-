@@ -20,11 +20,11 @@ function TaskInstructions({ text }: { text: string }) {
         if (isBulletBlock && /^you should/i.test(lines[0])) {
           return (
             <div key={i}>
-              <p className="text-sm font-semibold text-slate-800">{lines[0]}</p>
-              <ul className="mt-2 space-y-1.5">
+              <p className="text-base font-semibold text-slate-900 md:text-[17px]">{lines[0]}</p>
+              <ul className="mt-2.5 space-y-2">
                 {lines.slice(1).map((line) => (
-                  <li key={line} className="flex gap-2 text-sm leading-relaxed text-slate-700">
-                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-orange-400" />
+                  <li key={line} className="flex gap-2.5 text-base leading-relaxed text-slate-800 md:text-[17px]">
+                    <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-orange-400" />
                     <span>{line.replace(/^[-•*]\s*/, "")}</span>
                   </li>
                 ))}
@@ -34,7 +34,7 @@ function TaskInstructions({ text }: { text: string }) {
         }
 
         return (
-          <p key={i} className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+          <p key={i} className="text-base leading-relaxed text-slate-800 whitespace-pre-wrap md:text-[17px]">
             {block}
           </p>
         );
@@ -62,42 +62,37 @@ export function WritingPart1TaskPanel({
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Task</p>
-          <h3 className="text-sm font-bold text-slate-900">Read the chart and instructions</h3>
+          <h3 className="text-sm font-bold text-slate-900 md:text-base">Read the chart and instructions</h3>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-        {imageUrl && (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Visual stimulus
-              </p>
-            </div>
-            <div className="p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {imageUrl && (
+            <div className="border-b border-slate-100 bg-slate-50/80 p-3 md:p-4">
               <img
                 src={imageUrl}
                 alt="Writing task chart or diagram"
-                className="mx-auto max-h-[min(42vh,320px)] w-full object-contain"
+                className="mx-auto max-h-[min(48vh,380px)] w-full object-contain"
               />
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="mb-3 flex items-center gap-2 text-slate-600">
-            <FileText className="size-4 shrink-0" />
-            <span className="text-xs font-semibold uppercase tracking-wide">Instructions</span>
-          </div>
-          <TaskInstructions text={questionText} />
-        </div>
+          <div className="space-y-4 p-4 md:p-5">
+            <div className="flex items-center gap-2 text-slate-700">
+              <FileText className="size-4 shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-wide md:text-sm">Instructions</span>
+            </div>
+            <TaskInstructions text={questionText} />
 
-        <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50/60 px-4 py-3">
-          <p className="text-xs leading-relaxed text-orange-900">
-            <span className="font-semibold">Word limit:</span> write between{" "}
-            <span className="font-bold">{minWords}</span> and{" "}
-            <span className="font-bold">{maxWords}</span> words in your answer.
-          </p>
+            <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50/70 px-4 py-3">
+              <p className="text-sm leading-relaxed text-orange-950 md:text-base">
+                <span className="font-semibold">Word limit:</span> write between{" "}
+                <span className="font-bold">{minWords}</span> and{" "}
+                <span className="font-bold">{maxWords}</span> words in your answer.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

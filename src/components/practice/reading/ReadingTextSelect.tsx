@@ -50,7 +50,7 @@ export function ReadingStatementSelect({
         right ? "border-emerald-300 bg-emerald-50" : wrong ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-slate-50",
       )}
     >
-      <p className="text-sm text-slate-700">
+      <p className="text-base text-slate-700 md:text-[17px]">
         <span className="mr-2 font-bold text-slate-500">{index}.</span>
         {text}
       </p>
@@ -61,7 +61,7 @@ export function ReadingStatementSelect({
           disabled={revealed}
           onClick={() => !revealed && setOpen((o) => !o)}
           className={cn(
-            "flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm font-medium transition-all",
+            "flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-base font-medium transition-all",
             open && "rounded-b-none border-b-transparent shadow-sm",
             value
               ? wrong
@@ -96,7 +96,7 @@ export function ReadingStatementSelect({
                 type="button"
                 onClick={() => pick(label)}
                 className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-slate-50",
+                  "flex w-full items-center gap-3 px-3 py-2.5 text-left text-base transition hover:bg-slate-50",
                   selected && !revealed && "bg-cyan-50",
                   isCorrectOption && "bg-emerald-50 text-emerald-800",
                   isWrongPick && "bg-rose-50 text-rose-800",

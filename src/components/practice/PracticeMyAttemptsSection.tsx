@@ -65,11 +65,11 @@ function BasicAttemptScore({ score, total }: { score: number; total: number }) {
 
   return (
     <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <span className="text-xs font-medium text-slate-600">Score</span>
-      <span className={cn("text-sm font-bold tabular-nums", color)}>
+      <span className="text-sm font-medium text-slate-600">Score</span>
+      <span className={cn("text-base font-bold tabular-nums", color)}>
         {score}/{total}
       </span>
-      <span className={cn("text-xs font-semibold tabular-nums", color)}>({pct}%)</span>
+      <span className={cn("text-sm font-semibold tabular-nums", color)}>({pct}%)</span>
     </div>
   );
 }
@@ -93,7 +93,7 @@ function ScoreInfoBadge({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
     >
       Score Info
       <span className={cn("font-bold tabular-nums", scoreColor)}>
@@ -105,7 +105,7 @@ function ScoreInfoBadge({
 
 function TaskTypeBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex rounded-full border border-teal-300 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-700">
+    <span className="inline-flex rounded-full border border-teal-300 bg-white px-3 py-1 text-xs font-bold text-slate-700">
       {label}
     </span>
   );
@@ -146,18 +146,18 @@ function SpeakingAttemptItem({
   return (
     <li className="border-b border-slate-100 px-4 py-4 last:border-b-0">
       <div className="mb-3 flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
-          <User className="size-3" />
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+          <User className="size-3.5" />
           Me
         </span>
       </div>
       <div className="flex items-center gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-bold text-cyan-800">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-sm font-bold text-cyan-800">
           {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold uppercase tracking-wide text-slate-800">{displayName}</p>
-          <p className="text-xs text-slate-500">{format(new Date(attempt.created_at), "yyyy-MM-dd")}</p>
+          <p className="text-base font-bold uppercase tracking-wide text-slate-800">{displayName}</p>
+          <p className="text-sm text-slate-500">{format(new Date(attempt.created_at), "yyyy-MM-dd")}</p>
         </div>
       </div>
       {audioSrc && (
@@ -185,12 +185,12 @@ function SpeakingAttemptItem({
 
 export function PracticeMyAttemptsHeading({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center justify-center gap-4 bg-slate-50 px-4 py-4", className)}>
-      <div className="h-px w-16 max-w-32 flex-1 bg-slate-200" />
-      <h2 className="shrink-0 px-2 text-sm font-bold uppercase tracking-wide text-slate-700">
+    <div className={cn("flex items-center justify-center gap-4 bg-white px-4 py-5 md:py-6", className)}>
+      <div className="h-0.5 w-16 max-w-40 flex-1 rounded-full bg-slate-200" />
+      <h2 className="shrink-0 px-3 text-lg font-extrabold uppercase tracking-wide text-slate-800 md:text-xl">
         My Attempts
       </h2>
-      <div className="h-px w-16 max-w-32 flex-1 bg-slate-200" />
+      <div className="h-0.5 w-16 max-w-40 flex-1 rounded-full bg-slate-200" />
     </div>
   );
 }
@@ -274,18 +274,18 @@ export function PracticeMyAttemptsContent({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-12 pt-2 md:px-6">
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-8 pt-1 md:px-6">
         {currentQuestion && (
-          <p className="text-center text-xs text-slate-500">
+          <p className="text-center text-sm text-slate-600 md:text-base">
             Attempts for{" "}
-            <span className="font-medium text-slate-700">
+            <span className="font-semibold text-slate-800">
               #{currentQuestion.index} {currentQuestion.title}
             </span>
           </p>
         )}
 
         {questionAttempts.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400">
+          <p className="rounded-xl border border-dashed border-slate-200 bg-white py-10 text-center text-base text-slate-500 md:text-lg">
             {isSpeaking
               ? "No attempts for this question yet. Submit your recording to see it here."
               : "No attempts for this question yet. Complete and submit to see your history here."}
@@ -303,16 +303,16 @@ export function PracticeMyAttemptsContent({
             ))}
           </ul>
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 bg-white">
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white shadow-sm">
             {questionAttempts.map((att) => {
               const answer = getLocalAnswer(att.question_set_id);
               const { score: displayScore, total: displayTotal } = resolveAttemptScore(att);
               return (
-                <li key={att.id} className="p-4">
+                <li key={att.id} className="p-4 md:p-5">
                   <div className="flex w-full items-start gap-3 text-left">
-                    <History className="mt-0.5 size-5 shrink-0 text-emerald-500" />
+                    <History className="mt-0.5 size-5 shrink-0 text-emerald-500 md:size-6" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-800">
+                      <p className="text-base font-semibold text-slate-800 md:text-lg">
                         Attempt {format(new Date(att.created_at), "dd MMM yyyy, HH:mm")}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -328,11 +328,13 @@ export function PracticeMyAttemptsContent({
                             />
                           )
                         ) : (
-                          <span className="text-xs text-slate-400">Submitted</span>
+                          <span className="text-sm text-slate-500">Submitted</span>
                         )}
                       </div>
                       {module === "writing" && answer && (
-                        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-slate-600">{answer}</p>
+                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600 md:text-base">
+                          {answer}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -357,12 +359,16 @@ export function PracticeMyAttemptsContent({
   );
 }
 
-/** Heading + content in one scroll section (heading always above list). */
+/** Heading + content at page bottom — does not squeeze the question pane. */
 export function PracticeMyAttemptsSection(props: Props) {
   return (
-    <section id="practice-my-attempts" className="shrink-0 border-t border-slate-200 bg-slate-50">
-      <PracticeMyAttemptsHeading />
-      <PracticeMyAttemptsContent {...props} />
+    <section id="practice-my-attempts" className="shrink-0 border-t border-slate-200 bg-slate-100">
+      <div className="mx-auto w-full max-w-6xl bg-white lg:max-w-7xl">
+        <PracticeMyAttemptsHeading />
+        <div className="bg-slate-50/80">
+          <PracticeMyAttemptsContent {...props} />
+        </div>
+      </div>
     </section>
   );
 }

@@ -11,6 +11,14 @@ export const PRACTICE_SUBMIT_CLASS =
 export const PRACTICE_NAV_CLASS =
   "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 disabled:opacity-40";
 
+/** Shared centered material width — side gaps like PTE practice. */
+export const PRACTICE_CONTENT_FRAME =
+  "mx-auto flex min-h-0 w-full max-w-6xl flex-col bg-white lg:max-w-7xl";
+
+/** Fill available height (writing / speaking panes). */
+export const PRACTICE_CONTENT_FRAME_FILL =
+  "mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col bg-white lg:max-w-7xl";
+
 export type PracticeSubmitLabelVariant = "answers" | "answer" | "submit";
 
 export function practiceSubmitLabel(
@@ -63,7 +71,7 @@ type TaskFooterProps = {
   showRedo?: boolean;
 };
 
-/** Standard left-side actions: purple Submit + white Re-do. */
+/** Center actions: purple Submit + white Re-do. */
 export function PracticeTaskFooterActions({
   canSubmit,
   isSubmitting,
@@ -95,6 +103,9 @@ export function PracticeTaskFooterActions({
 }
 
 type BottomBarProps = {
+  /** Center actions (Submit / Re-do / word count). */
+  center?: ReactNode;
+  /** @deprecated use `center` — kept for existing call sites. */
   left?: ReactNode;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -103,7 +114,11 @@ type BottomBarProps = {
   top?: ReactNode;
 };
 
+/**
+ * Bottom nav: Previous (left) · Submit/actions (center) · Next (right).
+ */
 export function PracticeBottomBar({
+  center,
   left,
   onPrevious,
   onNext,
@@ -113,17 +128,24 @@ export function PracticeBottomBar({
 }: BottomBarProps) {
   const hasPrev = setIndex > 1;
   const hasNext = setIndex < totalSets;
+  const middle = center ?? left;
 
   return (
-    <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2 md:px-4">
+    <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 md:px-5">
       {top}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">{left}</div>
-        <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[minmax(5.5rem,1fr)_auto_minmax(5.5rem,1fr)] items-center gap-2">
+        <div className="justify-self-start">
           <PracticeNavButton disabled={!hasPrev} onClick={onPrevious}>
             <ChevronLeft className="size-4" />
             Previous
           </PracticeNavButton>
+        </div>
+
+        <div className="flex max-w-[min(100vw-12rem,28rem)] flex-wrap items-center justify-center gap-2 justify-self-center">
+          {middle}
+        </div>
+
+        <div className="justify-self-end">
           <PracticeNavButton disabled={!hasNext} onClick={onNext}>
             Next
             <ChevronRight className="size-4" />
