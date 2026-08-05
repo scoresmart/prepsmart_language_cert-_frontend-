@@ -12,6 +12,7 @@ import { usePracticeProgress } from "@/hooks/usePracticeProgress";
 import { supabase, supabaseConfigured } from "@/lib/supabase/client";
 import { subscriptionDaysRemaining } from "@/lib/subscription";
 import { useAuth } from "@/providers/AuthContext";
+import type { CefrLevel } from "@/types/lc";
 
 export function DashboardPage() {
   const { user, profile, profileLoading, refreshProfile } = useAuth();
@@ -31,6 +32,23 @@ export function DashboardPage() {
     },
     onSuccess: async () => {
       toast.success("Exam date saved");
+      await refreshProfile();
+      await qc.invalidateQueries({ queryKey: ["lc", "dashboard", user?.id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveTargetLevel = useMutation({
+    mutationFn: async (level: CefrLevel) => {
+      if (!user) return;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ target_score: level, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+    },
+    onSuccess: async () => {
+      toast.success("Target score saved");
       await refreshProfile();
       await qc.invalidateQueries({ queryKey: ["lc", "dashboard", user?.id] });
     },
@@ -104,8 +122,11 @@ export function DashboardPage() {
           examDate={profile?.exam_date ?? null}
           loading={loading}
           targetLevel={profile?.target_level ? `${profile.target_level} Level` : "B2 Level"}
+          currentTargetLevel={profile?.target_level ?? null}
           savingExamDate={saveExamDate.isPending}
+          savingTargetLevel={saveTargetLevel.isPending}
           onExamDateSave={async (isoDate) => saveExamDate.mutateAsync(isoDate)}
+          onTargetLevelSave={async (level) => saveTargetLevel.mutateAsync(level)}
         />
 
         <OverallPracticeCard

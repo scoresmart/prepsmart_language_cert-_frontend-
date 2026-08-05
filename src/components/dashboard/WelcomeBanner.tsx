@@ -1,7 +1,9 @@
-import { CalendarDays, Flame, Target, Zap } from "lucide-react";
+import { CalendarDays, Flame, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExamDatePicker } from "@/components/dashboard/ExamDatePicker";
+import { TargetLevelPicker } from "@/components/dashboard/TargetLevelPicker";
 import { cn } from "@/lib/utils";
+import type { CefrLevel } from "@/types/lc";
 
 type Props = {
   username: string;
@@ -11,8 +13,11 @@ type Props = {
   examDate?: string | null;
   loading?: boolean;
   targetLevel?: string;
+  currentTargetLevel?: CefrLevel | null;
   savingExamDate?: boolean;
+  savingTargetLevel?: boolean;
   onExamDateSave?: (isoDate: string) => Promise<void>;
+  onTargetLevelSave?: (level: CefrLevel) => Promise<void>;
 };
 
 export function WelcomeBanner({
@@ -23,8 +28,11 @@ export function WelcomeBanner({
   examDate = null,
   loading,
   targetLevel = "B2 Level",
+  currentTargetLevel = null,
   savingExamDate,
+  savingTargetLevel,
   onExamDateSave,
+  onTargetLevelSave,
 }: Props) {
   return (
     <div className="relative overflow-visible rounded-3xl p-6 text-white shadow-2xl shadow-emerald-900/30 md:p-8">
@@ -57,14 +65,16 @@ export function WelcomeBanner({
           </h1>
         </div>
 
-        <button
-          type="button"
-          className="animate-fade-in-up flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur-md transition-all duration-300 hover:scale-105 hover:bg-white/20 active:scale-95"
-          style={{ animationDelay: "160ms" }}
-        >
-          <Target className="size-4" />
-          Set Target Score
-        </button>
+        <div className="relative z-40 animate-fade-in-up" style={{ animationDelay: "160ms" }}>
+          {onTargetLevelSave ? (
+            <TargetLevelPicker
+              asBannerCta
+              targetLevel={currentTargetLevel}
+              onSave={onTargetLevelSave}
+              saving={savingTargetLevel}
+            />
+          ) : null}
+        </div>
 
         <div className="relative z-30 flex flex-wrap gap-3 animate-fade-in-up" style={{ animationDelay: "240ms" }}>
           {[
