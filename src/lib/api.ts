@@ -194,13 +194,22 @@ export interface SpeakingQuestion {
   created_at: string;
 }
 
+/**
+ * `structure` is a jsonb column that has carried three shapes over time: the
+ * legacy v1 prompts, the v2 academic parts, and the current v3 four-part exam.
+ * Readers normalise whichever shape they get, so the type stays open.
+ */
+export type SpeakingSetStructureJson =
+  | import("./speakingSetStructure").SpeakingSetStructure
+  | import("./speakingExamStructure").SpeakingExamStructure;
+
 export interface SpeakingSet {
   id: string;
   title: string;
   level: string;
   sort_order: number;
   is_published: boolean;
-  structure: import("./speakingSetStructure").SpeakingSetStructure;
+  structure: SpeakingSetStructureJson;
   created_at: string;
   updated_at: string;
 }

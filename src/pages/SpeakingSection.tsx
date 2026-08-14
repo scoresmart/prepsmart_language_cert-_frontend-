@@ -60,6 +60,11 @@ import {
 
 import type { RecordingPhase } from "@/components/practice/speaking/UserRecordingBox";
 
+import { RealtimeExaminerPanel } from "@/components/practice/speaking/RealtimeExaminerPanel";
+import { useRealtimeExam } from "@/hooks/useRealtimeExam";
+import { buildExamSegments, examSegmentSummary } from "@/lib/speakingExamSegments";
+import { saveRealtimeExamResult } from "@/lib/realtimeExamStorage";
+
 
 
 type SectionProps = {
@@ -266,6 +271,91 @@ function SpeakingRunner({
   const speakingPractice = useSpeakingPracticeStateOptional();
 
   const setSpeakingPracticeState = speakingPractice?.setState;
+
+  // ------------------------------------------------ live examiner (realtime)
+
+  /**
+   * The realtime examiner runs the whole set as one continuous conversation,
+   * so it replaces the per-question record/submit flow rather than sitting
+   * alongside it. It only appears for admin-authored sets, which are the ones
+   * that carry a script.
+   */
+  const examSegments = React.useMemo(
+    () => (speakingSet ? buildExamSegments(speakingSet.structure) : []),
+    [speakingSet],
+  );
+  const examInfo = React.useMemo(() => examSegmentSummary(examSegments), [examSegments]);
+  // A set with nothing but boilerplate has no exam to run.
+  const realtimeAvailable = examInfo.spoken > 0;
+  const realtimeMinutes = examInfo.estimatedMinutes;
+
+  const [liveMode, setLiveMode] = React.useState(
+    () => import.meta.env.VITE_REALTIME_EXAM_DEFAULT === "1",
+  );
+
+  const draftKey = speakingSet ? `${speakingSet.id}:${part}` : `speaking:${part}:${questionIndex}`;
+  const realtime = useRealtimeExam(draftKey);
+  const realtimeState = realtime.state;
+
+  const startRealtimeExam = React.useCallback(() => {
+    if (!realtimeAvailable) return;
+    stopMicrophoneStream(micStreamRef.current);
+    micStreamRef.current = null;
+    setMicStream(null);
+    setMicReady(false);
+
+    void realtime.start({
+      setId: speakingSet?.id ?? null,
+      setTitle: speakingSet?.title ?? null,
+      level: normalizeCefrLevel(question?.level ?? ""),
+      examName: "LanguageCert Academic Speaking",
+      attemptId: null,
+      segments: examSegments,
+    });
+  }, [realtimeAvailable, realtime, speakingSet, question?.level, examSegments]);
+
+  // Persist the finished conversation the moment the examiner signs off.
+  const savedRealtimeRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (realtimeState.phase !== "ended" || !realtimeState.summary) return;
+    if (savedRealtimeRef.current === realtimeState.summary.sessionId) return;
+    savedRealtimeRef.current = realtimeState.summary.sessionId;
+
+    saveRealtimeExamResult(draftKey, {
+      sessionId: realtimeState.summary.sessionId,
+      setId: speakingSet?.id ?? null,
+      setTitle: speakingSet?.title ?? null,
+      level: question?.level ?? null,
+      updatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      transcript: realtimeState.transcript,
+      summary: realtimeState.summary,
+      endReason: realtimeState.endReason,
+    });
+
+    const answered = realtimeState.summary.questionsAnswered;
+    const asked = Math.max(1, realtimeState.summary.questionsAsked);
+    void persistAttempt(
+      {
+        question_type: `speaking_realtime_part_${part}`,
+        question_set_id: speakingSet?.id ?? `speaking-${part}-${questionIndex}`,
+        score: Math.round((answered / asked) * 50),
+        total: 50,
+      },
+      onAttemptSaved,
+    );
+  }, [
+    realtimeState.phase,
+    realtimeState.summary,
+    realtimeState.transcript,
+    realtimeState.endReason,
+    draftKey,
+    speakingSet,
+    question?.level,
+    part,
+    questionIndex,
+    onAttemptSaved,
+  ]);
 
 
 
@@ -772,7 +862,17 @@ function SpeakingRunner({
 
   const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob) && playbackStarted;
 
-  const footer = !requiresRecording ? (
+  const liveExamActive = liveMode && realtimeAvailable;
+
+  const footer = liveExamActive ? (
+    <PracticeNavButton
+      onClick={() => (realtimeState.phase === "ended" ? onNext?.() : undefined)}
+      disabled={realtimeState.phase !== "ended"}
+      className="gap-2"
+    >
+      {realtimeState.phase === "ended" ? "Continue" : "Finish the test to continue"}
+    </PracticeNavButton>
+  ) : !requiresRecording ? (
     <PracticeNavButton
       onClick={finishPartOrAdvance}
       disabled={!instructionDone && Boolean(question.audio_url)}
@@ -859,6 +959,46 @@ function SpeakingRunner({
 
     >
 
+      {realtimeAvailable && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {liveExamActive ? "Live examiner mode" : "Practice mode"}
+            </p>
+            <p className="text-xs text-slate-500">
+              {liveExamActive
+                ? `A live examiner runs the full four-part test as one conversation (~${realtimeMinutes} min).`
+                : "Record and submit one question at a time."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (realtimeState.running) return;
+              setLiveMode((v) => !v);
+            }}
+            disabled={realtimeState.running}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {liveExamActive ? "Switch to practice mode" : "Switch to live examiner"}
+          </button>
+        </div>
+      )}
+
+      {liveExamActive ? (
+        <RealtimeExaminerPanel
+          state={realtimeState}
+          setTitle={speakingSet?.title}
+          level={question.level}
+          estimatedMinutes={realtimeMinutes}
+          onStart={startRealtimeExam}
+          onStop={realtime.stop}
+          onRetry={() => {
+            savedRealtimeRef.current = null;
+            realtime.reset();
+          }}
+        />
+      ) : (
       <SpeakingQuestionPanel
         question={question}
         questionIndex={questionIndex}
@@ -897,6 +1037,7 @@ function SpeakingRunner({
         recordingBlob={recordingBlob}
         onPlaybackStarted={() => setPlaybackStarted(true)}
       />
+      )}
 
     </SpeakingPracticeShell>
 

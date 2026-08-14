@@ -3,6 +3,7 @@ import { LISTENING_PARTS } from "@/lib/listeningInstructions";
 import { READING_PARTS } from "@/lib/readingInstructions";
 import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
 import { SPEAKING_PARTS } from "@/lib/speakingInstructions";
+import { fetchSpeakingSetsFromSupabase } from "@/lib/speakingSetsFallback";
 import { WRITING_PARTS } from "@/lib/writingInstructions";
 
 export type PracticeSection = "writing" | "reading" | "listening" | "speaking";
@@ -158,7 +159,10 @@ export async function fetchPracticeQuestions(
       const setsRes = await api.speaking.sets.list();
       sets = setsRes.data ?? [];
     } catch {
-      // Fall back to legacy per-part questions if sets API is unavailable.
+      // Backend unreachable (typically local dev with no API on :5000). The
+      // sets live in Supabase and RLS already lets a signed-in student read
+      // published ones, so go straight to the source before giving up.
+      sets = await fetchSpeakingSetsFromSupabase();
     }
     if (sets.length > 0) {
       return sets.map((s, i) => ({

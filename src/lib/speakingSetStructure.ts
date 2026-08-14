@@ -109,7 +109,8 @@ export type SpeakingSet = {
   level: string;
   sort_order: number;
   is_published: boolean;
-  structure: SpeakingSetStructure;
+  /** Open shape: v1, v2 and v3 sets all live in this column. */
+  structure: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -390,7 +391,7 @@ export function normalizeSpeakingSetStructure(raw: unknown): SpeakingSetStructur
   return base;
 }
 
-export function validateSpeakingSetStructure(structure: SpeakingSetStructure): string | null {
+export function validateSpeakingSetStructure(structure: unknown): string | null {
   const s = normalizeSpeakingSetStructure(structure);
 
   if (s.mode === "question_set_15") {
@@ -419,7 +420,7 @@ export function validateSpeakingSetStructure(structure: SpeakingSetStructure): s
   return null;
 }
 
-export function flattenPartPrompts(part: string | number, structure: SpeakingSetStructure): FlatSpeakingPrompt[] {
+export function flattenPartPrompts(part: string | number, structure: unknown): FlatSpeakingPrompt[] {
   const s = normalizeSpeakingSetStructure(structure);
   const partNum = typeof part === "number" ? part : parseInt(part, 10) || 1;
 
@@ -614,11 +615,11 @@ export function flattenPartPrompts(part: string | number, structure: SpeakingSet
   ];
 }
 
-export function countPartPrompts(structure: SpeakingSetStructure, part: string | number): number {
+export function countPartPrompts(structure: unknown, part: string | number): number {
   return flattenPartPrompts(part, structure).length;
 }
 
-export function countSetPrompts(structure: SpeakingSetStructure): number {
+export function countSetPrompts(structure: unknown): number {
   const s = normalizeSpeakingSetStructure(structure);
   if (s.mode === "question_set_15") {
     return (s.question_set_questions ?? []).slice(0, SPEAKING_QUESTION_SET_SIZE).length;
@@ -636,7 +637,7 @@ export type SpeakingSetProgress = {
 };
 
 export function getSetPromptProgress(
-  structure: SpeakingSetStructure,
+  structure: unknown,
   part: string | number,
   promptIndex: number,
 ): SpeakingSetProgress {

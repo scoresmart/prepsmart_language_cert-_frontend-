@@ -12,25 +12,40 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { api, type SpeakingSet } from "@/lib/api";
-import { SpeakingSetEditor, speakingSetToForm } from "@/components/admin/SpeakingSetEditor";
+import { SpeakingExamEditor } from "@/components/admin/SpeakingExamEditor";
+import { speakingExamToForm } from "@/lib/speakingExamForm";
 import {
-  normalizeSpeakingSetStructure,
-  validateSpeakingSetStructure,
-} from "@/lib/speakingSetStructure";
+  normalizeSpeakingExamStructure,
+  validateSpeakingExamStructure,
+} from "@/lib/speakingExamStructure";
+import {
+  adminCreateSpeakingSetInSupabase,
+  adminDeleteSpeakingSetInSupabase,
+  adminListSpeakingSetsFromSupabase,
+  adminUpdateSpeakingSetInSupabase,
+  isNetworkFailure,
+} from "@/lib/speakingSetsFallback";
 
 export function AdminSpeakingPage() {
   const qc = useQueryClient();
   const [search, setSearch] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editRow, setEditRow] = React.useState<SpeakingSet | null>(null);
-  const [form, setForm] = React.useState(speakingSetToForm());
+  const [form, setForm] = React.useState(speakingExamToForm());
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ["admin", "speaking-sets"],
     queryFn: async () => {
-      const res = await api.speaking.sets.listAll();
-      return res.data ?? [];
+      try {
+        const res = await api.speaking.sets.listAll();
+        return res.data ?? [];
+      } catch (err) {
+        // Backend unreachable (typically local dev). The sets live in Supabase
+        // and RLS lets an admin read them directly, so author from there.
+        if (!isNetworkFailure(err)) throw err;
+        return adminListSpeakingSetsFromSupabase();
+      }
     },
     staleTime: 5 * 60_000,
   });
@@ -39,9 +54,9 @@ export function AdminSpeakingPage() {
     mutationFn: async (publish: boolean) => {
       if (!form.title.trim()) throw new Error("Set title is required");
 
-      const structure = normalizeSpeakingSetStructure(form.structure);
+      const structure = normalizeSpeakingExamStructure(form.structure);
       if (publish) {
-        const validationError = validateSpeakingSetStructure(structure);
+        const validationError = validateSpeakingExamStructure(structure);
         if (validationError) throw new Error(validationError);
       }
 
@@ -53,10 +68,19 @@ export function AdminSpeakingPage() {
         structure,
       };
 
-      if (editRow) {
-        await api.speaking.sets.update(editRow.id, payload);
-      } else {
-        await api.speaking.sets.create(payload);
+      try {
+        if (editRow) {
+          await api.speaking.sets.update(editRow.id, payload);
+        } else {
+          await api.speaking.sets.create(payload);
+        }
+      } catch (err) {
+        if (!isNetworkFailure(err)) throw err;
+        if (editRow) {
+          await adminUpdateSpeakingSetInSupabase(editRow.id, payload);
+        } else {
+          await adminCreateSpeakingSetInSupabase(payload);
+        }
       }
     },
     onSuccess: (_data, publish) => {
@@ -65,14 +89,21 @@ export function AdminSpeakingPage() {
       qc.invalidateQueries({ queryKey: ["practice", "speaking"] });
       setDialogOpen(false);
       setEditRow(null);
-      setForm(speakingSetToForm());
+      setForm(speakingExamToForm());
       toast.success(publish ? "Set published" : "Draft saved");
     },
     onError: (err: Error) => toast.error(err.message || "Could not save set"),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => api.speaking.sets.delete(id),
+    mutationFn: async (id: string) => {
+      try {
+        await api.speaking.sets.delete(id);
+      } catch (err) {
+        if (!isNetworkFailure(err)) throw err;
+        await adminDeleteSpeakingSetInSupabase(id);
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "speaking-sets"] });
       setDeleteId(null);
@@ -84,12 +115,17 @@ export function AdminSpeakingPage() {
   const togglePublish = useMutation({
     mutationFn: async ({ id, val, row }: { id: string; val: boolean; row: SpeakingSet }) => {
       if (val) {
-        const validationError = validateSpeakingSetStructure(
-          normalizeSpeakingSetStructure(row.structure),
+        const validationError = validateSpeakingExamStructure(
+          normalizeSpeakingExamStructure(row.structure),
         );
         if (validationError) throw new Error(validationError);
       }
-      await api.speaking.sets.update(id, { is_published: val });
+      try {
+        await api.speaking.sets.update(id, { is_published: val });
+      } catch (err) {
+        if (!isNetworkFailure(err)) throw err;
+        await adminUpdateSpeakingSetInSupabase(id, { is_published: val });
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "speaking-sets"] });
@@ -105,20 +141,25 @@ export function AdminSpeakingPage() {
 
   const openAdd = () => {
     setEditRow(null);
-    setForm(speakingSetToForm());
+    setForm(speakingExamToForm());
     setDialogOpen(true);
   };
 
   const openEdit = (row: SpeakingSet) => {
     setEditRow(row);
-    setForm(speakingSetToForm(row));
+    setForm(speakingExamToForm(row));
     setDialogOpen(true);
   };
 
   const setSummary = (row: SpeakingSet) => {
-    const s = normalizeSpeakingSetStructure(row.structure);
-    const modeLabel = s.mode === "academic_parts" ? "Academic parts" : "15-question set";
-    return `${s.exam_name} · ${modeLabel} · ${row.is_published ? "Published" : "Draft"} · Level ${row.level}`;
+    const s = normalizeSpeakingExamStructure(row.structure);
+    const bits = [
+      `${s.part1.questions.filter((x) => x.trim()).length}/5 Part 1 questions`,
+      `${s.part2.situations.filter((x) => x.text.trim()).length}/2 situations`,
+      s.part3.image_url ? "picture set" : "no picture",
+      s.part4.topic.trim() ? "topic set" : "no topic",
+    ];
+    return `Level ${row.level} · ${bits.join(" · ")}`;
   };
 
   return (
@@ -131,7 +172,7 @@ export function AdminSpeakingPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-800">Speaking Sets</h1>
             <p className="text-sm text-slate-500">
-              Create question sets for speaking practice. Default mode is 15 questions with question audio only.
+              Author the four-part speaking exam. The live examiner reads your content aloud and runs the test.
             </p>
           </div>
         </div>
@@ -142,11 +183,17 @@ export function AdminSpeakingPage() {
       </div>
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-900">
-        <p className="font-medium">Set modes</p>
+        <p className="font-medium">What you provide for each set</p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-blue-800/90">
-          <li>15-question set: only question text/audio is used during practice.</li>
-          <li>Academic parts (legacy): intro + Parts 1–4 with role-play/read-aloud/presentation blocks.</li>
+          <li>Part 1 — five questions about the candidate (1 min 30 sec).</li>
+          <li>Part 2 — two role-play situations, one minute of conversation each.</li>
+          <li>Part 3 — a picture with its title and idea (20 sec to prepare, 1 min 30 sec speaking).</li>
+          <li>Part 4 — one topic to talk about (30 sec to prepare, 2 min speaking).</li>
         </ul>
+        <p className="mt-2 text-blue-800/90">
+          The examiner's wording, the timers, and the follow-up questions it asks about your picture and
+          topic are automatic. Sets created before this format keep whatever questions they had.
+        </p>
       </div>
 
       <div className="relative max-w-sm">
@@ -221,7 +268,7 @@ export function AdminSpeakingPage() {
           <DialogHeader>
             <DialogTitle>{editRow ? "Edit Speaking Set" : "Add New Speaking Set"}</DialogTitle>
           </DialogHeader>
-          <SpeakingSetEditor
+          <SpeakingExamEditor
             value={form}
             onChange={setForm}
             disabled={saveMutation.isPending}

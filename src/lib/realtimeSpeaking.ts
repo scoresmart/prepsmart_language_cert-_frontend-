@@ -23,9 +23,9 @@ function getRealtimeWsUrl(): string {
   return (import.meta.env.VITE_REALTIME_SPEAKING_WS_URL ?? "").trim();
 }
 
-function getRealtimeApiKey(): string {
-  return (import.meta.env.VITE_REALTIME_SPEAKING_API_KEY ?? "").trim();
-}
+// NOTE: no API key is read here on purpose. Anything prefixed VITE_ is inlined
+// into the client bundle, so a provider key placed here would be readable by
+// every visitor. The WS bridge must authenticate to the provider server-side.
 
 function pickScore(payload: RealtimeEnvelope): SpeakingScoreResult | null {
   const candidates = [payload.score, payload.result, payload.data];
@@ -53,9 +53,6 @@ export function isRealtimeSpeakingEnabled(): boolean {
 export async function scoreSpeakingViaRealtime(params: RealtimeScoreParams): Promise<SpeakingScoreResult> {
   const wsUrl = getRealtimeWsUrl();
   if (!wsUrl) throw new Error("Realtime speaking is not configured.");
-
-  const apiKey = getRealtimeApiKey();
-  const authToken = btoa(unescape(encodeURIComponent(apiKey || "")));
 
   const ws = new WebSocket(wsUrl);
 
@@ -121,10 +118,6 @@ export async function scoreSpeakingViaRealtime(params: RealtimeScoreParams): Pro
           ws.send(
             JSON.stringify({
               type: "start",
-              auth: {
-                apiKey: apiKey || undefined,
-                token: apiKey ? authToken : undefined,
-              },
               metadata: {
                 level: params.level,
                 taskDescription: params.taskDescription,
