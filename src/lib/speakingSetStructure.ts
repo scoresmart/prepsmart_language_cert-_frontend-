@@ -86,11 +86,17 @@ export type SpeakingSetPart4 = {
   ending: SpeakingTextAudio;
 };
 
+export type SpeakingSetMode = "academic_parts" | "question_set_15";
+
+export const SPEAKING_QUESTION_SET_SIZE = 15;
+
 export type SpeakingSetStructure = {
   version: 2;
+  mode?: SpeakingSetMode;
   exam_name: string;
   disclaimer: string;
   general_intro: SpeakingTextAudio;
+  question_set_questions?: SpeakingTimedPrompt[];
   part1: SpeakingSetPart1;
   part2: SpeakingSetPart2;
   part3: SpeakingSetPart3;
@@ -149,9 +155,11 @@ export function emptySpeakingSetStructure(): SpeakingSetStructure {
   const t = SPEAKING_SET_DEFAULTS.timers;
   return {
     version: 2,
+    mode: "question_set_15",
     exam_name: SPEAKING_SET_EXAM_NAME,
     disclaimer: SPEAKING_SET_DEFAULTS.disclaimer,
     general_intro: textAudio(SPEAKING_SET_DEFAULTS.generalIntroText),
+    question_set_questions: Array.from({ length: SPEAKING_QUESTION_SET_SIZE }, () => timedPrompt("", t.part1Answer)),
     part1: {
       student_instruction: SPEAKING_SET_DEFAULTS.part1StudentInstruction,
       examiner_instruction: textAudio(SPEAKING_SET_DEFAULTS.part1ExaminerInstruction),
@@ -198,15 +206,33 @@ export function normalizeSpeakingSetStructure(raw: unknown): SpeakingSetStructur
     const p3 = (s.part3 ?? {}) as Partial<SpeakingSetPart3>;
     const p4 = (s.part4 ?? {}) as Partial<SpeakingSetPart4>;
     const general = (s.general_intro ?? {}) as Partial<SpeakingTextAudio>;
+    const mode: SpeakingSetMode = s.mode === "academic_parts" ? "academic_parts" : "question_set_15";
+    const rawQuestionSetQuestions = Array.isArray(s.question_set_questions)
+      ? (s.question_set_questions as Partial<SpeakingTimedPrompt>[])
+      : [];
+    const questionSetQuestions =
+      rawQuestionSetQuestions.length > 0
+        ? Array.from({ length: SPEAKING_QUESTION_SET_SIZE }, (_, i) => {
+            const q = rawQuestionSetQuestions[i] ?? {};
+            return {
+              text: q.text ?? "",
+              audio_url: q.audio_url ?? null,
+              timer_seconds:
+                Number(q.timer_seconds) > 0 ? Number(q.timer_seconds) : SPEAKING_SET_DEFAULTS.timers.part1Answer,
+            };
+          })
+        : base.question_set_questions ?? [];
 
     return {
       version: 2,
+      mode,
       exam_name: typeof s.exam_name === "string" && s.exam_name.trim() ? s.exam_name : base.exam_name,
       disclaimer: typeof s.disclaimer === "string" && s.disclaimer.trim() ? s.disclaimer : base.disclaimer,
       general_intro: {
         text: general.text?.trim() || base.general_intro.text,
         audio_url: general.audio_url ?? null,
       },
+      question_set_questions: questionSetQuestions,
       part1: {
         student_instruction: p1.student_instruction?.trim() || base.part1.student_instruction,
         examiner_instruction: {
@@ -347,11 +373,36 @@ export function normalizeSpeakingSetStructure(raw: unknown): SpeakingSetStructur
     );
   }
 
+  const legacyRecordingPrompts: SpeakingTimedPrompt[] = [];
+  for (const q of base.part1.questions) legacyRecordingPrompts.push(q);
+  for (const q of base.part2.role_plays) legacyRecordingPrompts.push(q);
+  legacyRecordingPrompts.push(base.part3.follow_up);
+  for (const q of base.part4.follow_ups) legacyRecordingPrompts.push(q);
+  base.question_set_questions = Array.from({ length: SPEAKING_QUESTION_SET_SIZE }, (_, i) => {
+    const q = legacyRecordingPrompts[i] ?? {};
+    return timedPrompt(
+      (q.text ?? "").trim(),
+      Number(q.timer_seconds) > 0 ? Number(q.timer_seconds) : SPEAKING_SET_DEFAULTS.timers.part1Answer,
+      q.audio_url ?? null,
+    );
+  });
+
   return base;
 }
 
 export function validateSpeakingSetStructure(structure: SpeakingSetStructure): string | null {
   const s = normalizeSpeakingSetStructure(structure);
+
+  if (s.mode === "question_set_15") {
+    const questions = s.question_set_questions ?? [];
+    if (questions.length !== SPEAKING_QUESTION_SET_SIZE) {
+      return `Question set must contain exactly ${SPEAKING_QUESTION_SET_SIZE} questions.`;
+    }
+    for (const [i, q] of questions.entries()) {
+      if (!q.text.trim()) return `Question ${i + 1} text is required.`;
+    }
+    return null;
+  }
 
   for (const [i, q] of s.part1.questions.entries()) {
     if (!q.text.trim()) return `Part 1 Question ${i + 1} text is required.`;
@@ -371,6 +422,20 @@ export function validateSpeakingSetStructure(structure: SpeakingSetStructure): s
 export function flattenPartPrompts(part: string | number, structure: SpeakingSetStructure): FlatSpeakingPrompt[] {
   const s = normalizeSpeakingSetStructure(structure);
   const partNum = typeof part === "number" ? part : parseInt(part, 10) || 1;
+
+  if (s.mode === "question_set_15") {
+    return (s.question_set_questions ?? []).slice(0, SPEAKING_QUESTION_SET_SIZE).map((q, i) => ({
+      kind: "question",
+      promptIndex: i,
+      promptLabel: `Question ${i + 1} of ${SPEAKING_QUESTION_SET_SIZE}`,
+      title: `Question ${i + 1}`,
+      content: q.text,
+      audio_url: q.audio_url,
+      prepSeconds: 0,
+      recordSeconds: q.timer_seconds || SPEAKING_SET_DEFAULTS.timers.part1Answer,
+      requiresRecording: true,
+    }));
+  }
 
   if (partNum === 1) {
     const items: FlatSpeakingPrompt[] = [];
@@ -554,7 +619,11 @@ export function countPartPrompts(structure: SpeakingSetStructure, part: string |
 }
 
 export function countSetPrompts(structure: SpeakingSetStructure): number {
-  return [1, 2, 3, 4].reduce((sum, partNum) => sum + countPartPrompts(structure, partNum), 0);
+  const s = normalizeSpeakingSetStructure(structure);
+  if (s.mode === "question_set_15") {
+    return (s.question_set_questions ?? []).slice(0, SPEAKING_QUESTION_SET_SIZE).length;
+  }
+  return [1, 2, 3, 4].reduce((sum, partNum) => sum + countPartPrompts(s, partNum), 0);
 }
 
 export type SpeakingSetProgress = {
@@ -563,6 +632,7 @@ export type SpeakingSetProgress = {
   currentInSet: number;
   totalInSet: number;
   partNumber: number;
+  mode: SpeakingSetMode;
 };
 
 export function getSetPromptProgress(
@@ -570,7 +640,8 @@ export function getSetPromptProgress(
   part: string | number,
   promptIndex: number,
 ): SpeakingSetProgress {
-  const partNumber = typeof part === "number" ? part : parseInt(part, 10) || 1;
+  const normalized = normalizeSpeakingSetStructure(structure);
+  const partNumber = normalized.mode === "question_set_15" ? 1 : typeof part === "number" ? part : parseInt(part, 10) || 1;
   const totalInPart = countPartPrompts(structure, partNumber);
   const totalInSet = countSetPrompts(structure);
 
@@ -585,6 +656,7 @@ export function getSetPromptProgress(
     currentInSet: beforeThisPart + promptIndex + 1,
     totalInSet,
     partNumber,
+    mode: normalized.mode === "academic_parts" ? "academic_parts" : "question_set_15",
   };
 }
 
@@ -670,6 +742,7 @@ export function stripStructureAudioRefs(structure: SpeakingSetStructure): Speaki
 
   return {
     ...s,
+    question_set_questions: (s.question_set_questions ?? []).map(stripTP),
     general_intro: stripTA(s.general_intro),
     part1: {
       ...s.part1,

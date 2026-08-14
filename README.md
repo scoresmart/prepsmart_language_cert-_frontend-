@@ -42,7 +42,8 @@ from lc.user_profiles where email = 'your@email.com';
 ## Product notes
 
 - **Auth:** email + password only in this phase (Google OAuth & email provider deferred).
-- **Practice:** routes are scaffolded; swap in the real question runners when ready.
+- **Speaking sets:** supports a 15-question mode (question audio only) and a legacy academic-parts mode.
+- **Realtime speaking feedback:** set `VITE_REALTIME_SPEAKING_WS_URL` to enable WebSocket scoring (frontend sends audio + metadata and waits for final score). If not set, scoring uses the existing REST endpoint.
 - **Stripe:** subscription UI and paywall logic are wired to `lc.subscriptions`; Checkout/Portal/webhooks are a follow-up.
 
 ## Stack

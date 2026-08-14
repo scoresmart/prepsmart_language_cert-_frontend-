@@ -117,7 +117,8 @@ export function AdminSpeakingPage() {
 
   const setSummary = (row: SpeakingSet) => {
     const s = normalizeSpeakingSetStructure(row.structure);
-    return `${s.exam_name} · ${row.is_published ? "Published" : "Draft"} · Level ${row.level}`;
+    const modeLabel = s.mode === "academic_parts" ? "Academic parts" : "15-question set";
+    return `${s.exam_name} · ${modeLabel} · ${row.is_published ? "Published" : "Draft"} · Level ${row.level}`;
   };
 
   return (
@@ -130,7 +131,7 @@ export function AdminSpeakingPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-800">Speaking Sets</h1>
             <p className="text-sm text-slate-500">
-              LanguageCert Academic Speaking — full set with intro, Parts 1–4, timers, and examiner audio
+              Create question sets for speaking practice. Default mode is 15 questions with question audio only.
             </p>
           </div>
         </div>
@@ -141,12 +142,10 @@ export function AdminSpeakingPage() {
       </div>
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-900">
-        <p className="font-medium">Set structure (LanguageCert Academic)</p>
+        <p className="font-medium">Set modes</p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-blue-800/90">
-          <li>General intro + Part 1: 5 questions (30s each)</li>
-          <li>Part 2: 2 role plays (60s each)</li>
-          <li>Part 3: Read aloud (30s prep + 60s read) + follow-up (45s)</li>
-          <li>Part 4: Presentation (60s prep + 120s speak) + 2 follow-ups (45s) + ending</li>
+          <li>15-question set: only question text/audio is used during practice.</li>
+          <li>Academic parts (legacy): intro + Parts 1–4 with role-play/read-aloud/presentation blocks.</li>
         </ul>
       </div>
 

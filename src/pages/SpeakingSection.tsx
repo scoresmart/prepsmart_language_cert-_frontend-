@@ -50,6 +50,7 @@ import { useSubmitLock } from "@/hooks/useSubmitLock";
 
 import type { ScoringPhase, SpeakingScoreResult } from "@/lib/scoringTypes";
 import { extractReadAloudText } from "@/lib/speakingScoreUtils";
+import { isRealtimeSpeakingEnabled, scoreSpeakingViaRealtime } from "@/lib/realtimeSpeaking";
 import {
   kindInstruction,
   loadSpeakingSetScores,
@@ -583,13 +584,24 @@ function SpeakingRunner({
 
       try {
         const cefrLevel = normalizeCefrLevel(question.level);
-        const formData = new FormData();
-        formData.append("audio", uploadBlob, "recording.wav");
-        formData.append("level", cefrLevel);
-        formData.append("task_description", `${question.title}\n\n${question.content}`);
-        if (attemptId) formData.append("attempt_id", attemptId);
-
-        const res = await api.scoring.speakingAudio(formData);
+        const taskDescription = `${question.title}\n\n${question.content}`;
+        const res = isRealtimeSpeakingEnabled()
+          ? {
+              data: await scoreSpeakingViaRealtime({
+                audioBlob: uploadBlob,
+                level: cefrLevel,
+                taskDescription,
+                attemptId,
+              }),
+            }
+          : await (async () => {
+              const formData = new FormData();
+              formData.append("audio", uploadBlob, "recording.wav");
+              formData.append("level", cefrLevel);
+              formData.append("task_description", taskDescription);
+              if (attemptId) formData.append("attempt_id", attemptId);
+              return api.scoring.speakingAudio(formData);
+            })();
         notifyMockSpeakingAiScore(part, res.data.scores.scaledTotal);
         onAttemptSaved?.();
 

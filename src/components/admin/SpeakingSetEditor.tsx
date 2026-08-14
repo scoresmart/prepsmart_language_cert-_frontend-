@@ -6,9 +6,11 @@ import { api } from "@/lib/api";
 import {
   emptySpeakingSetStructure,
   normalizeSpeakingSetStructure,
+  SPEAKING_QUESTION_SET_SIZE,
   stripStructureAudioRefs,
   SPEAKING_SET_EXAM_NAME,
   type SpeakingSet,
+  type SpeakingSetMode,
   type SpeakingSetStructure,
   type SpeakingTextAudio,
   type SpeakingTimedPrompt,
@@ -157,6 +159,7 @@ function SectionHeader({ title, hint }: { title: string; hint: string }) {
 
 export function SpeakingSetEditor({ value, onChange, disabled }: Props) {
   const structure = normalizeSpeakingSetStructure(value.structure);
+  const mode: SpeakingSetMode = structure.mode === "academic_parts" ? "academic_parts" : "question_set_15";
 
   const updateStructure = (patch: Partial<SpeakingSetStructure>) => {
     onChange({ ...value, structure: { ...structure, ...patch } });
@@ -194,6 +197,19 @@ export function SpeakingSetEditor({ value, onChange, disabled }: Props) {
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label>Set Mode</Label>
+            <select
+              value={mode}
+              onChange={(e) => updateStructure({ mode: e.target.value as SpeakingSetMode })}
+              disabled={disabled}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="question_set_15">15-question set (question audio only)</option>
+              <option value="academic_parts">Academic parts (legacy)</option>
+            </select>
+          </div>
+
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Disclaimer Text</Label>
             <Input
@@ -204,16 +220,50 @@ export function SpeakingSetEditor({ value, onChange, disabled }: Props) {
           </div>
         </div>
 
-        <TextAudioBlock
-          textLabel="General Examiner Introduction Text"
-          audioLabel="General Examiner Introduction Audio (plays before Part 1)"
-          value={structure.general_intro}
-          onChange={(general_intro) => updateStructure({ general_intro })}
-          disabled={disabled}
-          rows={4}
-        />
+        {mode === "academic_parts" ? (
+          <TextAudioBlock
+            textLabel="General Examiner Introduction Text"
+            audioLabel="General Examiner Introduction Audio (plays before Part 1)"
+            value={structure.general_intro}
+            onChange={(general_intro) => updateStructure({ general_intro })}
+            disabled={disabled}
+            rows={4}
+          />
+        ) : (
+          <p className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
+            This mode uses only question-level audio. Intro/part instruction/presentation/follow-up/ending audio is ignored.
+          </p>
+        )}
       </section>
 
+      {mode === "question_set_15" && (
+        <section className="space-y-4">
+          <SectionHeader
+            title="Question Set"
+            hint={`Add exactly ${SPEAKING_QUESTION_SET_SIZE} speaking questions. Only question audio will be played.`}
+          />
+
+          {(structure.question_set_questions ?? []).slice(0, SPEAKING_QUESTION_SET_SIZE).map((q, i) => (
+            <TimedPromptBlock
+              key={i}
+              title={`Question ${i + 1}`}
+              textLabel={`Question ${i + 1} Text`}
+              audioLabel={`Question ${i + 1} Audio`}
+              timerLabel={`Question ${i + 1} Answer Timer (seconds)`}
+              value={q}
+              onChange={(next) => {
+                const question_set_questions = [...(structure.question_set_questions ?? [])];
+                question_set_questions[i] = next;
+                updateStructure({ question_set_questions });
+              }}
+              disabled={disabled}
+            />
+          ))}
+        </section>
+      )}
+
+      {mode === "academic_parts" && (
+      <>
       {/* Part 1 */}
       <section className="space-y-4">
         <SectionHeader
@@ -526,6 +576,8 @@ export function SpeakingSetEditor({ value, onChange, disabled }: Props) {
           disabled={disabled}
         />
       </section>
+      </>
+      )}
     </div>
   );
 }

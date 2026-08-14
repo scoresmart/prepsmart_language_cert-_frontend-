@@ -10,7 +10,7 @@ type Props = {
 };
 
 export function SpeakingSetProgressBar({ progress, promptLabel, setTitle, className }: Props) {
-  const { currentInSet, totalInSet, currentInPart, totalInPart, partNumber } = progress;
+  const { currentInSet, totalInSet, currentInPart, totalInPart, partNumber, mode } = progress;
   const percent = totalInSet > 0 ? Math.round((currentInSet / totalInSet) * 100) : 0;
 
   return (
@@ -39,11 +39,17 @@ export function SpeakingSetProgressBar({ progress, promptLabel, setTitle, classN
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500 sm:text-xs">
-        <span>
-          Part <span className="font-semibold text-slate-700">{partNumber}</span>
-          {" · "}
-          Step <span className="font-semibold text-slate-700">{currentInPart}</span> of {totalInPart}
-        </span>
+        {mode === "question_set_15" ? (
+          <span>
+            Question <span className="font-semibold text-slate-700">{currentInSet}</span> of {totalInSet}
+          </span>
+        ) : (
+          <span>
+            Part <span className="font-semibold text-slate-700">{partNumber}</span>
+            {" · "}
+            Step <span className="font-semibold text-slate-700">{currentInPart}</span> of {totalInPart}
+          </span>
+        )}
         {promptLabel && (
           <>
             <span className="hidden text-slate-300 sm:inline">|</span>
