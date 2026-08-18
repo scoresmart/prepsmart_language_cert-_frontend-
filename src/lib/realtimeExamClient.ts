@@ -120,6 +120,24 @@ export function realtimeExamWsUrl(): string {
 /** The bridge closes with this when the socket carried no valid session. */
 const CLOSE_UNAUTHORIZED = 4401;
 
+function isLocalHost(): boolean {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+}
+
+/**
+ * True when a hosted build fell back to the local dev bridge address.
+ *
+ * Without VITE_REALTIME_EXAM_WS_URL the fallback points at port 8787 on
+ * whatever host served the page. That is correct for `npm run dev` and
+ * impossible anywhere else: no hosting platform exposes 8787, so the socket
+ * hangs for the full connect timeout and then reports a dropped connection —
+ * which reads as an outage rather than a missing environment variable.
+ */
+export function isRealtimeExamMisconfigured(): boolean {
+  const configured = (import.meta.env.VITE_REALTIME_EXAM_WS_URL ?? "").trim();
+  return !configured && !isLocalHost();
+}
+
 /**
  * The exam URL with the candidate's Supabase session attached.
  *
@@ -129,6 +147,12 @@ const CLOSE_UNAUTHORIZED = 4401;
  * where the URL is inside the encrypted tunnel.
  */
 async function realtimeExamWsUrlWithAuth(): Promise<string> {
+  if (isRealtimeExamMisconfigured()) {
+    throw new Error(
+      "The live examiner is not configured for this site. Set VITE_REALTIME_EXAM_WS_URL to " +
+        "wss://<your-backend-host>/realtime/speaking and redeploy the frontend.",
+    );
+  }
   const base = realtimeExamWsUrl();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -283,9 +307,14 @@ export class RealtimeExamClient {
       this.ws = ws;
 
       let settled = false;
+      // Set once a specific reason has reached the user. The socket usually
+      // errors a moment after we give up on it, and the generic drop message
+      // must not bury the accurate one.
+      let reported = false;
       const connectTimeout = window.setTimeout(() => {
         if (settled) return;
         settled = true;
+        reported = true;
         this.teardownAudio();
         try {
           ws.close();
@@ -308,9 +337,10 @@ export class RealtimeExamClient {
 
       ws.onerror = () => {
         if (settled) {
-          this.handlers.onError?.("The examiner connection dropped.");
+          if (!reported) this.handlers.onError?.("The examiner connection dropped.");
           return;
         }
+        reported = true;
         settled = true;
         window.clearTimeout(connectTimeout);
         this.teardownAudio();
@@ -334,6 +364,7 @@ export class RealtimeExamClient {
           const message =
             event.reason ||
             "Your session has expired. Please sign in again to start the speaking test.";
+          reported = true;
           if (!settled) {
             settled = true;
             this.teardownAudio();
