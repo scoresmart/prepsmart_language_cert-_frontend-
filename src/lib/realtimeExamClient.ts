@@ -9,6 +9,8 @@
  * the test ends. It is never cycled between questions.
  */
 
+import { supabase } from "./supabase/client";
+
 const SAMPLE_RATE = 24000;
 const WORKLET_URL = "/realtime-mic-worklet.js";
 
@@ -115,6 +117,28 @@ export function realtimeExamWsUrl(): string {
   return `${proto}//${window.location.hostname}:8787/realtime/speaking`;
 }
 
+/** The bridge closes with this when the socket carried no valid session. */
+const CLOSE_UNAUTHORIZED = 4401;
+
+/**
+ * The exam URL with the candidate's Supabase session attached.
+ *
+ * The bridge refuses sockets without one — an exam costs real money to run, so
+ * it has to know who is running it. A browser cannot set headers on a
+ * WebSocket, so the token goes in the query string; that is safe over wss://,
+ * where the URL is inside the encrypted tunnel.
+ */
+async function realtimeExamWsUrlWithAuth(): Promise<string> {
+  const base = realtimeExamWsUrl();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) {
+    throw new Error("Your session has expired. Please sign in again to start the speaking test.");
+  }
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export function isRealtimeExamConfigured(): boolean {
   return Boolean(realtimeExamWsUrl());
 }
@@ -199,7 +223,12 @@ export class RealtimeExamClient {
     if (this.ws) return;
     this.stopped = false;
 
-    // Mic first: a permission prompt should never happen mid-exam.
+    // Session first. Asking for the microphone and only then discovering the
+    // login has expired leaves the candidate with a permission prompt, a live
+    // mic to clean up, and an error that looks like a hardware fault.
+    const url = await realtimeExamWsUrlWithAuth();
+
+    // Mic next: a permission prompt should never happen mid-exam.
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -235,12 +264,14 @@ export class RealtimeExamClient {
       if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data.buffer);
     };
 
-    await this.openSocket(config);
+    await this.openSocket(config, url);
   }
 
-  private openSocket(config: RealtimeExamConfig): Promise<void> {
+  private openSocket(config: RealtimeExamConfig, url: string): Promise<void> {
+    // Never put the url in a message or a log - it carries the session token.
+    // Anything user-facing uses the bare endpoint instead.
+    const shownUrl = realtimeExamWsUrl();
     return new Promise((resolve, reject) => {
-      const url = realtimeExamWsUrl();
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
@@ -263,7 +294,7 @@ export class RealtimeExamClient {
         }
         reject(
           new Error(
-            `The examiner service is not running. Start it with "npm run realtime" (expected at ${url}).`,
+            `The examiner service did not respond (${shownUrl}).`,
           ),
         );
       }, 8000);
@@ -285,15 +316,33 @@ export class RealtimeExamClient {
         this.teardownAudio();
         reject(
           new Error(
-            `Could not reach the examiner service at ${url}. Start it with "npm run realtime".`,
+            `Could not reach the examiner service at ${shownUrl}.`,
           ),
         );
       };
 
       ws.onmessage = (event) => this.onMessage(event);
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         window.clearTimeout(connectTimeout);
+
+        // The bridge refuses an unauthenticated socket by closing with this
+        // code instead of failing the upgrade, precisely so the reason
+        // survives the trip: a failed upgrade reaches the browser as a bare
+        // 1006 with no detail, which would read as 'examiner is down'.
+        if (event.code === CLOSE_UNAUTHORIZED) {
+          const message =
+            event.reason ||
+            "Your session has expired. Please sign in again to start the speaking test.";
+          if (!settled) {
+            settled = true;
+            this.teardownAudio();
+            reject(new Error(message));
+          } else {
+            this.handlers.onError?.(message);
+          }
+        }
+
         this.cleanup();
       };
     });
