@@ -1,14 +1,13 @@
-import * as React from "react";
-
-import { AlertTriangle, Hourglass, Loader2, Mic, PhoneOff, Play, Radio, Volume2 } from "lucide-react";
+import { PhoneOff, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { RealtimeExamState } from "@/hooks/useRealtimeExam";
 import { speakingImagePublicUrl } from "@/lib/speakingExamForm";
+import { SpeakingLiveWave, type LiveSpeaker } from "@/components/practice/speaking/SpeakingLiveWave";
 
 const PHASE_LABEL: Record<string, string> = {
-  idle: "Ready to begin",
+  idle: "Mic ready",
   connecting: "Connecting to the examiner…",
   greeting: "Examiner is introducing the test",
   examiner: "Examiner is speaking",
@@ -34,25 +33,6 @@ function formatClock(ms: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-function MicMeter({ level, active }: { level: number; active: boolean }) {
-  const bars = 12;
-  const lit = Math.min(bars, Math.round(level * bars * 1.6));
-  return (
-    <div className="flex items-end gap-[3px]" aria-hidden>
-      {Array.from({ length: bars }, (_, i) => (
-        <span
-          key={i}
-          className={cn(
-            "w-[3px] rounded-full transition-all duration-75",
-            i < lit && active ? "bg-emerald-500" : "bg-slate-200",
-          )}
-          style={{ height: `${6 + i * 1.4}px` }}
-        />
-      ))}
-    </div>
-  );
-}
-
 type Props = {
   state: RealtimeExamState;
   setTitle?: string;
@@ -72,17 +52,34 @@ export function RealtimeExaminerPanel({
   onStop,
   onRetry,
 }: Props) {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [state.transcript.length]);
-
-  const micLive = state.running && !state.connecting;
   const preparing = state.prepareLeft > 0;
   const image = speakingImagePublicUrl(state.imageUrl);
   const showImage = Boolean(image) && state.part === 3 && state.running;
+
+  const candidateActive = state.candidateSpeaking || state.micLevel > 0.04;
+  const speaker: LiveSpeaker = state.examinerSpeaking
+    ? "examiner"
+    : state.running && !preparing && candidateActive
+      ? "candidate"
+      : "idle";
+
+  const waveLabel = state.connecting
+    ? "Connecting to the examiner…"
+    : preparing
+      ? `Preparation time — ${state.prepareLeft}s left`
+      : state.examinerSpeaking
+        ? "Examiner is speaking"
+        : candidateActive && state.running
+          ? "Listening to your answer"
+          : (PHASE_LABEL[state.phase] ?? state.phase);
+
+  const waveHint = preparing
+    ? "Think about your answer — don't speak yet."
+    : state.running
+      ? state.segmentLabel || undefined
+      : state.phase === "ended"
+        ? undefined
+        : "Your microphone stays on for the whole test.";
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -151,51 +148,14 @@ export function RealtimeExaminerPanel({
         </div>
       </div>
 
-      {/* ----------------------------------------------------------- state */}
-      <div
-        className={cn(
-          "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
-          preparing
-            ? "border-sky-200 bg-sky-50 text-sky-800"
-            : state.phase === "listening" || state.phase === "answering"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : state.phase === "nudging" || state.phase === "no_response"
-                ? "border-amber-200 bg-amber-50 text-amber-800"
-                : "border-slate-200 bg-slate-50 text-slate-700",
-        )}
-      >
-        {state.connecting ? (
-          <Loader2 className="size-4 shrink-0 animate-spin" />
-        ) : preparing ? (
-          <Hourglass className="size-4 shrink-0" />
-        ) : state.examinerSpeaking ? (
-          <Volume2 className="size-4 shrink-0 animate-pulse" />
-        ) : state.phase === "nudging" || state.phase === "no_response" ? (
-          <AlertTriangle className="size-4 shrink-0" />
-        ) : (
-          <Radio className="size-4 shrink-0" />
-        )}
-
-        <span className="flex-1">
-          {preparing
-            ? `Preparation time — ${state.prepareLeft}s left. Think about your answer; the examiner is waiting.`
-            : state.examinerSpeaking
-              ? "Examiner is speaking — listen"
-              : (PHASE_LABEL[state.phase] ?? state.phase)}
-        </span>
-
-        {micLive && !preparing && (
-          <span className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <Mic className={cn("size-3.5", state.candidateSpeaking ? "text-emerald-600" : "text-slate-400")} />
-            <MicMeter level={state.micLevel} active={state.candidateSpeaking || state.micLevel > 0.02} />
-            <span>mic on</span>
-          </span>
-        )}
-      </div>
-
-      {state.segmentLabel && state.running && !preparing && (
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{state.segmentLabel}</p>
-      )}
+      {/* ------------------------------------------- live speaking indicator */}
+      <SpeakingLiveWave
+        speaker={speaker}
+        level={state.micLevel}
+        active={state.running || state.connecting}
+        label={waveLabel}
+        hint={waveHint}
+      />
 
       {state.nudgeLevel > 0 && state.phase !== "ended" && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
@@ -220,43 +180,6 @@ export function RealtimeExaminerPanel({
           <img src={image!} alt="Describe this" className="max-h-72 w-full bg-slate-50 object-contain" />
         </div>
       )}
-
-      {/* ------------------------------------------------------ transcript */}
-      <div className="flex min-h-[240px] flex-1 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-3">
-          <h4 className="text-sm font-semibold text-slate-900">Live transcript</h4>
-          <p className="text-xs text-slate-500">Saved automatically as you speak.</p>
-        </div>
-
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          {state.transcript.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">
-              {state.running
-                ? "Waiting for the examiner to begin…"
-                : "Start the test and your conversation will appear here."}
-            </p>
-          ) : (
-            state.transcript.map((turn, i) => (
-              <div
-                key={`${turn.at}-${i}`}
-                className={cn("flex flex-col gap-1", turn.role === "candidate" && "items-end")}
-              >
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  {turn.role === "examiner" ? "Examiner" : "You"}
-                </span>
-                <p
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                    turn.role === "examiner" ? "bg-slate-100 text-slate-800" : "bg-slate-900 text-white",
-                  )}
-                >
-                  {turn.text}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
 
       {/* --------------------------------------------------------- results */}
       {state.phase === "ended" && state.summary && (
@@ -295,12 +218,6 @@ export function RealtimeExaminerPanel({
             <Play className="size-4" />
             Take it again
           </Button>
-        )}
-
-        {!state.running && state.phase !== "ended" && (
-          <p className="text-xs text-slate-500">
-            Your microphone stays on for the whole test — just speak when the examiner finishes.
-          </p>
         )}
       </div>
     </div>

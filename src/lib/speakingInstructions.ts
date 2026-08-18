@@ -119,3 +119,23 @@ export const SPEAKING_PREP_SECONDS = 5;
 
 /** @deprecated Use getSpeakingPartTiming(part, level) */
 export const SPEAKING_RECORD_SECONDS = 60;
+
+/**
+ * Short, task-card style description shown in the coloured task banner at the
+ * top of the speaking practice screen (mirrors the LanguageCert task briefing).
+ */
+export function getSpeakingBannerDescription(part: string, level?: string | null): string {
+  const { prepSeconds, recordSeconds } = getSpeakingPartTiming(part, level);
+  switch (part) {
+    case "1":
+      return `Listen to the examiner, then answer each question in your own words. You have ${formatDuration(recordSeconds)} to speak — give a direct answer plus a short reason or example.`;
+    case "2":
+      return `Take part in the role play below. You have ${formatDuration(prepSeconds)} to prepare and up to ${formatDuration(recordSeconds)} to respond as naturally as possible.`;
+    case "3":
+      return `Look at the text below. In ${formatDuration(prepSeconds)}, you must read this text aloud as naturally and clearly as possible.`;
+    case "4":
+      return `Look at the topic below. You have ${formatDuration(prepSeconds)} to prepare, then speak for up to ${formatDuration(recordSeconds)} — introduction, two main points with examples, and a conclusion.`;
+    default:
+      return getSpeakingInstruction(part, level);
+  }
+}

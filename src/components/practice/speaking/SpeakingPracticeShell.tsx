@@ -70,7 +70,7 @@ export function SpeakingPracticeShell({
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 pt-4 md:p-3 md:pt-5">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pt-4 md:p-4 md:pt-5">
               <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
             </div>
 

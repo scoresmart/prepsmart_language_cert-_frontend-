@@ -39,7 +39,7 @@ import { normalizeSpeakingQuestion } from "@/lib/speakingQuestionStructure";
 
 import { SpeakingPracticeShell } from "@/components/practice/speaking/SpeakingPracticeShell";
 
-import { useSpeakingPracticeStateOptional, SpeakingSidebarPanel } from "@/components/practice/speaking/SpeakingPracticeContext";
+import { useSpeakingPracticeStateOptional } from "@/components/practice/speaking/SpeakingPracticeContext";
 
 import { SpeakingQuestionPanel } from "@/components/practice/speaking/SpeakingQuestionPanel";
 
@@ -955,8 +955,6 @@ function SpeakingRunner({
 
       footerTop={footerTop}
 
-      sidebar={<SpeakingSidebarPanel />}
-
     >
 
       {realtimeAvailable && (
@@ -1001,6 +999,7 @@ function SpeakingRunner({
       ) : (
       <SpeakingQuestionPanel
         question={question}
+        part={part}
         questionIndex={questionIndex}
         totalSets={totalSets}
         attemptKey={attemptKey + promptRevision}
