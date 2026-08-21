@@ -1,22 +1,18 @@
 import { Link } from "react-router-dom";
-import { Home } from "lucide-react";
+import { Crown, Home } from "lucide-react";
 import { LCPracticeDropdown } from "@/components/layout/LCPracticeDropdown";
 import { difficultyLabel } from "@/lib/practiceNavigation";
 import { Badge } from "@/components/ui/badge";
 
 type Props = {
   questionIndex: number;
-  totalQuestions: number;
-  practicedCount: number;
-  pendingCount: number;
+  /** Kept for call-site parity — the bar no longer prints counts or progress. */
+  totalQuestions?: number;
+  practicedCount?: number;
+  pendingCount?: number;
 };
 
-export function PracticeWorkspaceBar({
-  questionIndex,
-  totalQuestions,
-  practicedCount,
-  pendingCount,
-}: Props) {
+export function PracticeWorkspaceBar({ questionIndex }: Props) {
   const difficulty = difficultyLabel(questionIndex);
 
   return (
@@ -38,18 +34,16 @@ export function PracticeWorkspaceBar({
         </nav>
 
         <div className="relative z-10 ml-auto flex flex-wrap items-center justify-end gap-2">
-          <span className="text-sm font-semibold text-slate-800">
-            Question {questionIndex}
-            <span className="font-normal text-slate-400"> / {totalQuestions}</span>
-          </span>
           <Badge variant="outline" className="text-xs capitalize">
             {difficulty}
           </Badge>
-          <span className="hidden text-xs text-slate-500 sm:inline">
-            <span className="font-medium text-emerald-600">{practicedCount} practiced</span>
-            {" · "}
-            <span className="font-medium text-amber-600">{pendingCount} pending</span>
-          </span>
+          <Link
+            to="/subscription"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+          >
+            <Crown className="size-4 shrink-0" aria-hidden />
+            Upgrade VIP
+          </Link>
         </div>
       </div>
     </header>

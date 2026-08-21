@@ -3,13 +3,17 @@ import { ChevronLeft, ChevronRight, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Purple submit — same across listening, reading, writing, and speaking. */
+/** Deep navy submit — same across listening, reading, writing, and speaking. */
 export const PRACTICE_SUBMIT_CLASS =
-  "bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50";
+  "bg-[#1e3a8a] text-white shadow-sm hover:bg-[#1b3479] disabled:opacity-50";
 
-/** White background, black text — redo, previous, next. */
+/** White background, slate text — redo and previous. */
 export const PRACTICE_NAV_CLASS =
-  "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 disabled:opacity-40";
+  "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40";
+
+/** Filled navy — the forward step, so it reads as the primary move. */
+export const PRACTICE_NEXT_CLASS =
+  "bg-[#1e3a8a] text-white shadow-sm hover:bg-[#1b3479] disabled:bg-slate-200 disabled:text-slate-400 disabled:opacity-100";
 
 /** Shared centered material width — side gaps like PTE practice. */
 export const PRACTICE_CONTENT_FRAME =
@@ -40,7 +44,11 @@ type SubmitProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function PracticeSubmitButton({ className, children, ...props }: SubmitProps) {
   return (
-    <Button type="button" size="sm" className={cn("gap-2", PRACTICE_SUBMIT_CLASS, className)} {...props}>
+    <Button
+      type="button"
+      className={cn("h-10 gap-2 px-5 text-sm font-semibold", PRACTICE_SUBMIT_CLASS, className)}
+      {...props}
+    >
       {children}
     </Button>
   );
@@ -52,7 +60,11 @@ type NavProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function PracticeNavButton({ className, children, ...props }: NavProps) {
   return (
-    <Button type="button" size="sm" className={cn("gap-1.5", PRACTICE_NAV_CLASS, className)} {...props}>
+    <Button
+      type="button"
+      className={cn("h-10 gap-1.5 px-4 text-sm font-semibold", PRACTICE_NAV_CLASS, className)}
+      {...props}
+    >
       {children}
     </Button>
   );
@@ -115,7 +127,7 @@ type BottomBarProps = {
 };
 
 /**
- * Bottom nav: Previous (left) · Submit/actions (center) · Next (right).
+ * Bottom action card: Submit / Re-do on the left, Previous · Next on the right.
  */
 export function PracticeBottomBar({
   center,
@@ -128,25 +140,24 @@ export function PracticeBottomBar({
 }: BottomBarProps) {
   const hasPrev = setIndex > 1;
   const hasNext = setIndex < totalSets;
-  const middle = center ?? left;
+  const actions = center ?? left;
 
   return (
-    <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 md:px-5">
+    <div className="shrink-0 bg-slate-50 px-3 py-3 md:px-5 md:py-4">
       {top}
-      <div className="grid grid-cols-[minmax(5.5rem,1fr)_auto_minmax(5.5rem,1fr)] items-center gap-2">
-        <div className="justify-self-start">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-[0_6px_20px_-14px_rgba(15,23,42,0.4)] md:px-4">
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+
+        <div className="flex items-center gap-2">
           <PracticeNavButton disabled={!hasPrev} onClick={onPrevious}>
             <ChevronLeft className="size-4" />
             Previous
           </PracticeNavButton>
-        </div>
-
-        <div className="flex max-w-[min(100vw-12rem,28rem)] flex-wrap items-center justify-center gap-2 justify-self-center">
-          {middle}
-        </div>
-
-        <div className="justify-self-end">
-          <PracticeNavButton disabled={!hasNext} onClick={onNext}>
+          <PracticeNavButton
+            disabled={!hasNext}
+            onClick={onNext}
+            className={PRACTICE_NEXT_CLASS}
+          >
             Next
             <ChevronRight className="size-4" />
           </PracticeNavButton>

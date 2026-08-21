@@ -1,6 +1,5 @@
 import { Bookmark } from "lucide-react";
 import { ExaminerAudioBox } from "@/components/practice/speaking/ExaminerAudioBox";
-import { SpeakingTaskBanner } from "@/components/practice/speaking/SpeakingTaskBanner";
 import { UserRecordingBox, type RecordingPhase } from "@/components/practice/speaking/UserRecordingBox";
 import type { NormalizedSpeakingQuestion } from "@/lib/speakingQuestionStructure";
 import type { SpeakingPromptKind } from "@/lib/speakingSetStructure";
@@ -27,7 +26,8 @@ function formatClock(seconds: number): string {
 
 type Props = {
   question: NormalizedSpeakingQuestion;
-  part: string;
+  /** Kept for call-site parity — the part banner now lives in the shell header. */
+  part?: string;
   questionIndex: number;
   totalSets: number;
   attemptKey: number;
@@ -55,7 +55,6 @@ type Props = {
 
 export function SpeakingQuestionPanel({
   question,
-  part,
   questionIndex,
   totalSets,
   attemptKey,
@@ -90,8 +89,7 @@ export function SpeakingQuestionPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto pb-1">
-      {/* Coloured task banner — icon + task name + briefing */}
-      <SpeakingTaskBanner part={part} level={question.level} />
+      {/* The gradient task banner lives in the shell header. */}
 
       {/* Gap, then the question numbering box */}
       <div className="mt-4 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5">

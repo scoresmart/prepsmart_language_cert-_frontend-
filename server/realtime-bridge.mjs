@@ -56,8 +56,12 @@ if (!API_KEY.startsWith("sk-")) {
 }
 
 /** Dev-only origin allowlist so a random page can't open a billed session. */
+// Vite walks up a port at a time when one is busy, so cover the usual range —
+// otherwise a port bump shows up in the browser as an unexplained 403.
 const ALLOWED_ORIGINS = (process.env.REALTIME_ALLOWED_ORIGINS ??
-  "http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173,http://127.0.0.1:5173")
+  [5173, 5174, 5175, 5176, 5177, 8080]
+    .flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`])
+    .join(","))
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);

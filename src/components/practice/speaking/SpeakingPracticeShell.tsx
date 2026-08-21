@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
-import { Mic, Sparkles } from "lucide-react";
 import { PRACTICE_CONTENT_FRAME_FILL, PracticeBottomBar } from "@/components/practice/PracticeActionButtons";
+import { PracticeTaskHeader } from "@/components/practice/PracticeTaskHeader";
 import { SpeakingSetProgressBar } from "@/components/practice/speaking/SpeakingSetProgressBar";
-import { SPEAKING_PART_TITLES } from "@/lib/speakingInstructions";
+import {
+  SPEAKING_PART_ABBREV,
+  SPEAKING_PART_TITLES,
+  getSpeakingBannerDescription,
+} from "@/lib/speakingInstructions";
 import type { SpeakingSetProgress } from "@/lib/speakingSetStructure";
 
 type Props = {
@@ -23,6 +27,7 @@ type Props = {
 
 export function SpeakingPracticeShell({
   activePart,
+  level,
   setIndex = 1,
   totalSets = 1,
   setProgress,
@@ -35,30 +40,22 @@ export function SpeakingPracticeShell({
   footer,
   footerTop,
 }: Props) {
-  const partTitle = SPEAKING_PART_TITLES[activePart];
+  const partTitle = SPEAKING_PART_TITLES[activePart] ?? `Speaking Part ${activePart}`;
+  const abbrev = SPEAKING_PART_ABBREV[activePart] ?? activePart;
+  const briefing = getSpeakingBannerDescription(activePart, level);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-slate-100">
       <div className={PRACTICE_CONTENT_FRAME_FILL}>
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
-          <div className="flex items-center gap-2">
-            <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 sm:flex">
-              <Sparkles className="size-3.5 text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Mic className="hidden size-3.5 text-blue-400 sm:block" aria-hidden />
-              <div>
-                <p className="hidden text-[10px] font-semibold uppercase tracking-widest text-blue-400 sm:block">
-                  ScoreSmart LC
-                </p>
-                <p className="text-xs font-bold text-white sm:text-sm">
-                  Speaking — Q {setIndex}/{totalSets}
-                  {partTitle ? <span className="font-medium text-white/70"> · {partTitle}</span> : null}
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
+        <PracticeTaskHeader
+          module="speaking"
+          part={activePart}
+          title={partTitle}
+          description={briefing}
+          abbrev={abbrev}
+          setIndex={setIndex}
+          totalSets={totalSets}
+        />
 
         {setProgress ? (
           <SpeakingSetProgressBar

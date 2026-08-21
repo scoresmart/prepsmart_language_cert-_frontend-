@@ -289,10 +289,6 @@ function SpeakingRunner({
   const realtimeAvailable = examInfo.spoken > 0;
   const realtimeMinutes = examInfo.estimatedMinutes;
 
-  const [liveMode, setLiveMode] = React.useState(
-    () => import.meta.env.VITE_REALTIME_EXAM_DEFAULT === "1",
-  );
-
   const draftKey = speakingSet ? `${speakingSet.id}:${part}` : `speaking:${part}:${questionIndex}`;
   const realtime = useRealtimeExam(draftKey);
   const realtimeState = realtime.state;
@@ -862,7 +858,9 @@ function SpeakingRunner({
 
   const canSubmit = phase === "recorded" && !submitted && Boolean(recordingBlob) && playbackStarted;
 
-  const liveExamActive = liveMode && realtimeAvailable;
+  // The live examiner is the only speaking experience — the per-question
+  // record/submit flow is now just the fallback for sets that carry no script.
+  const liveExamActive = realtimeAvailable;
 
   const footer = liveExamActive ? (
     <PracticeNavButton
@@ -956,32 +954,6 @@ function SpeakingRunner({
       footerTop={footerTop}
 
     >
-
-      {realtimeAvailable && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
-              {liveExamActive ? "Live examiner mode" : "Practice mode"}
-            </p>
-            <p className="text-xs text-slate-500">
-              {liveExamActive
-                ? `A live examiner runs the full four-part test as one conversation (~${realtimeMinutes} min).`
-                : "Record and submit one question at a time."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (realtimeState.running) return;
-              setLiveMode((v) => !v);
-            }}
-            disabled={realtimeState.running}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {liveExamActive ? "Switch to practice mode" : "Switch to live examiner"}
-          </button>
-        </div>
-      )}
 
       {liveExamActive ? (
         <RealtimeExaminerPanel

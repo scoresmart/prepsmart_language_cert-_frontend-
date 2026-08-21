@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { BookOpen, Sparkles } from "lucide-react";
 import { PRACTICE_CONTENT_FRAME, PracticeBottomBar } from "@/components/practice/PracticeActionButtons";
-import { READING_PART_TITLES } from "@/lib/readingInstructions";
+import { PracticeTaskHeader } from "@/components/practice/PracticeTaskHeader";
+import { READING_INSTRUCTIONS, READING_PART_TITLES } from "@/lib/readingInstructions";
 
 type Props = {
   activePart: string;
@@ -30,30 +30,19 @@ export function ReadingPracticeShell({
   footer,
   footerTop,
 }: Props) {
-  const partTitle = READING_PART_TITLES[activePart];
+  const partTitle = READING_PART_TITLES[activePart] ?? `Reading Part ${activePart}`;
 
   return (
     <div className="w-full bg-slate-100">
       <div className={PRACTICE_CONTENT_FRAME}>
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#1a1a2e] via-[#1e2240] to-[#151528] px-3 py-2 md:px-4">
-          <div className="flex items-center gap-2">
-            <div className="hidden size-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 sm:flex">
-              <Sparkles className="size-3.5 text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="hidden size-3.5 text-emerald-400 sm:block" aria-hidden />
-              <div>
-                <p className="hidden text-[10px] font-semibold uppercase tracking-widest text-emerald-400 sm:block">
-                  ScoreSmart LC
-                </p>
-                <p className="text-xs font-bold text-white sm:text-sm">
-                  Reading — Set {setIndex}/{totalSets}
-                  {partTitle ? <span className="font-medium text-white/70"> · {partTitle}</span> : null}
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
+        <PracticeTaskHeader
+          module="reading"
+          part={activePart}
+          title={partTitle}
+          description={READING_INSTRUCTIONS[activePart]}
+          setIndex={setIndex}
+          totalSets={totalSets}
+        />
 
         <main className="flex w-full flex-col bg-white">
           {layout === "split" ? (
