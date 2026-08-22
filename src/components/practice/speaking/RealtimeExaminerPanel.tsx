@@ -1,10 +1,12 @@
-import { PhoneOff, Play } from "lucide-react";
+import { ImageOff, PhoneOff, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { RealtimeExamState } from "@/hooks/useRealtimeExam";
 import { speakingImagePublicUrl } from "@/lib/speakingExamForm";
+import type { ExamSegment } from "@/lib/speakingExamSegments";
 import { SpeakingLiveWave, type LiveSpeaker } from "@/components/practice/speaking/SpeakingLiveWave";
+import { RealtimeExamScorecard } from "@/components/practice/speaking/RealtimeExamScorecard";
 
 const PHASE_LABEL: Record<string, string> = {
   idle: "Mic ready",
@@ -38,6 +40,15 @@ type Props = {
   setTitle?: string;
   level?: string;
   estimatedMinutes: number;
+  /** Used for the per-part breakdown on the scorecard. */
+  segments?: ExamSegment[];
+  /** Attempt row to write the calculated score back to, when one was saved. */
+  attemptId?: string | null;
+  /**
+   * Picture to fall back on when the exam script carries none — an authored
+   * question image still belongs on screen during Part 3.
+   */
+  fallbackImageUrl?: string | null;
   onStart: () => void;
   onStop: () => void;
   onRetry: () => void;
@@ -52,13 +63,19 @@ export function RealtimeExaminerPanel({
   setTitle,
   level,
   estimatedMinutes,
+  segments,
+  attemptId,
+  fallbackImageUrl,
   onStart,
   onStop,
   onRetry,
 }: Props) {
   const preparing = state.prepareLeft > 0;
-  const image = speakingImagePublicUrl(state.imageUrl);
-  const showImage = Boolean(image) && state.part === 3 && state.running;
+  const image = speakingImagePublicUrl(state.imageUrl ?? fallbackImageUrl);
+  // Part 3 is "describe the picture", so the picture stays up for the whole of
+  // it — the introduction, the preparation countdown and every follow-up
+  // question — not just while a segment message happens to carry the URL.
+  const inPart3 = state.part === 3 && state.phase !== "idle" && state.phase !== "ended";
 
   const candidateActive = state.candidateSpeaking || state.micLevel > 0.04;
   const speaker: LiveSpeaker = state.examinerSpeaking
@@ -163,16 +180,38 @@ export function RealtimeExaminerPanel({
         />
 
         {/* --------------------------------------------- part 3 picture */}
-        {showImage && (
+        {inPart3 && image && (
           <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-            <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
               <h4 className="text-sm font-semibold text-slate-900">Look at this picture</h4>
+              {preparing && (
+                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold tabular-nums text-indigo-700">
+                  {state.prepareLeft}s
+                </span>
+              )}
             </div>
             <img
-              src={image!}
-              alt="Describe this"
-              className="max-h-64 w-full bg-slate-50 object-contain"
+              src={image}
+              alt="Describe this picture"
+              className="max-h-[22rem] w-full bg-slate-50 object-contain sm:max-h-[26rem]"
             />
+          </div>
+        )}
+
+        {/* The examiner announces a picture out loud, so a missing one has to
+            say so rather than leaving the candidate staring at blank space. */}
+        {inPart3 && !image && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3">
+            <ImageOff className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                No picture is attached to this set
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                Part 3 asks you to describe a picture, but this exam has none saved. An admin can
+                add one under Admin → Speaking → edit the set → Part 3 → picture.
+              </p>
+            </div>
           </div>
         )}
 
@@ -192,18 +231,16 @@ export function RealtimeExaminerPanel({
 
         {/* -------------------------------------------------------- results */}
         {state.phase === "ended" && state.summary && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">
-              {state.endReason === "no_response"
-                ? "Test ended — no answers were detected."
-                : "Test complete and saved."}
-            </p>
-            <p className="mt-1 text-xs text-slate-600">
-              {state.summary.questionsAnswered} of {state.summary.questionsAsked} answered ·{" "}
-              {state.summary.questionsSkipped} skipped · {formatClock(state.summary.durationMs)} ·{" "}
-              {state.summary.turns} turns recorded
-            </p>
-          </div>
+          <RealtimeExamScorecard
+            className="mt-4"
+            transcript={state.transcript}
+            summary={state.summary}
+            segments={segments}
+            setTitle={setTitle}
+            level={level}
+            attemptId={attemptId}
+            endReason={state.endReason}
+          />
         )}
 
         {/* -------------------------------------------------------- actions */}

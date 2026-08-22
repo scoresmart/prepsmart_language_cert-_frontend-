@@ -904,6 +904,20 @@ export const api = {
       }),
     speakingAudio: (formData: FormData) =>
       requestForm<ApiResponse<import("./scoringTypes").SpeakingScoreResult>>("/scoring/speaking/audio", formData),
+    /**
+     * Marks a speaking answer that was already transcribed — the live examiner
+     * streams text as it goes, so there is no audio file to upload.
+     */
+    speakingTranscript: (body: {
+      task_description: string;
+      transcript: string;
+      level: string;
+      attempt_id?: string;
+    }) =>
+      request<ApiResponse<import("./scoringTypes").SpeakingScoreResult>>("/scoring/speaking/transcript", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     attempt: (attemptId: string) =>
       request<
         ApiResponse<{

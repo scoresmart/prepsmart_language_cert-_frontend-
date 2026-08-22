@@ -96,7 +96,8 @@ export function useRealtimeExam(draftKey: string) {
 
       const client = new RealtimeExamClient({
         onPhase: (phase, info) =>
-          patch({
+          setState((prev) => ({
+            ...prev,
             phase,
             segmentIndex: info.segmentIndex,
             segmentTotal: info.segmentTotal,
@@ -105,7 +106,11 @@ export function useRealtimeExam(draftKey: string) {
             elapsedMs: info.elapsedMs,
             remainingMs: info.remainingMs,
             connecting: phase === "connecting",
-          }),
+            // A state frame carries the picture too. Keep whatever we already
+            // have when it arrives empty, or the Part 3 image flickers out
+            // between segments.
+            imageUrl: info.imageUrl ?? (info.part === prev.part ? prev.imageUrl : null),
+          })),
 
         onSegment: (seg) =>
           patch({

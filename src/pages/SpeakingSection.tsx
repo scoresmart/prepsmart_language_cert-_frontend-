@@ -266,6 +266,8 @@ function SpeakingRunner({
   const [scoringDialogOpen, setScoringDialogOpen] = React.useState(false);
   const [setScorecardOpen, setSetScorecardOpen] = React.useState(false);
   const [setScoreEntries, setSetScoreEntries] = React.useState<SpeakingSetPromptScoreEntry[]>([]);
+  /** Attempt row the live examiner just wrote, so its score can be filled in. */
+  const [realtimeAttemptId, setRealtimeAttemptId] = React.useState<string | null>(null);
   const pendingScoreCountRef = React.useRef(0);
 
   const speakingPractice = useSpeakingPracticeStateOptional();
@@ -331,6 +333,9 @@ function SpeakingRunner({
 
     const answered = realtimeState.summary.questionsAnswered;
     const asked = Math.max(1, realtimeState.summary.questionsAsked);
+    // A provisional completion score so the attempt row exists immediately.
+    // The scorecard passes this id to the marker, which overwrites the row with
+    // the real score once it has read the transcript.
     void persistAttempt(
       {
         question_type: `speaking_realtime_part_${part}`,
@@ -339,7 +344,7 @@ function SpeakingRunner({
         total: 50,
       },
       onAttemptSaved,
-    );
+    ).then(setRealtimeAttemptId);
   }, [
     realtimeState.phase,
     realtimeState.summary,
@@ -961,10 +966,14 @@ function SpeakingRunner({
           setTitle={speakingSet?.title}
           level={question.level}
           estimatedMinutes={realtimeMinutes}
+          segments={examSegments}
+          attemptId={realtimeAttemptId}
+          fallbackImageUrl={question.image_url}
           onStart={startRealtimeExam}
           onStop={realtime.stop}
           onRetry={() => {
             savedRealtimeRef.current = null;
+            setRealtimeAttemptId(null);
             realtime.reset();
           }}
         />
