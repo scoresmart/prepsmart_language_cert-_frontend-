@@ -13,39 +13,34 @@ type WaveSpec = {
   /** Phase offset so the ribbons never fully overlap. */
   phase: number;
   lw: number;
-  /** Opacity — the thinner ribbons sit further back. */
-  alpha: number;
 };
 
 const WAVES: WaveSpec[] = [
-  { a: 1.0, freq: 1.15, speed: 0.0016, phase: 0, lw: 3, alpha: 0.95 },
-  { a: 0.78, freq: 1.75, speed: -0.0021, phase: 1.7, lw: 2.4, alpha: 0.72 },
-  { a: 0.58, freq: 2.45, speed: 0.0027, phase: 3.4, lw: 1.9, alpha: 0.55 },
-  { a: 0.4, freq: 3.3, speed: -0.0034, phase: 5.1, lw: 1.5, alpha: 0.42 },
+  { a: 1.0, freq: 1.15, speed: 0.0016, phase: 0, lw: 2.6 },
+  { a: 0.78, freq: 1.75, speed: -0.0021, phase: 1.7, lw: 2.2 },
+  { a: 0.58, freq: 2.45, speed: 0.0027, phase: 3.4, lw: 1.8 },
+  { a: 0.4, freq: 3.3, speed: -0.0034, phase: 5.1, lw: 1.4 },
 ];
 
-/**
- * Siri-style colour ramps tuned for a white card — saturated enough to read
- * against the light background, one ramp per speaker.
- */
+/** Siri-style colour ramps — one per speaker. */
 const PALETTE: Record<LiveSpeaker, string[][]> = {
   examiner: [
-    ["#0ea5e9", "#6366f1", "#a855f7"],
-    ["#06b6d4", "#3b82f6", "#8b5cf6"],
-    ["#6366f1", "#a855f7", "#0ea5e9"],
-    ["#3b82f6", "#8b5cf6", "#06b6d4"],
+    ["#38bdf8", "#6366f1", "#a855f7"],
+    ["#22d3ee", "#3b82f6", "#8b5cf6"],
+    ["#818cf8", "#c084fc", "#38bdf8"],
+    ["#60a5fa", "#a78bfa", "#22d3ee"],
   ],
   candidate: [
-    ["#10b981", "#06b6d4", "#0ea5e9"],
-    ["#22c55e", "#14b8a6", "#06b6d4"],
-    ["#84cc16", "#10b981", "#0891b2"],
-    ["#2dd4bf", "#0ea5e9", "#10b981"],
+    ["#34d399", "#22d3ee", "#38bdf8"],
+    ["#4ade80", "#2dd4bf", "#22d3ee"],
+    ["#a3e635", "#34d399", "#06b6d4"],
+    ["#5eead4", "#38bdf8", "#34d399"],
   ],
   idle: [
-    ["#94a3b8", "#cbd5e1", "#94a3b8"],
-    ["#a1aab8", "#cdd5e0", "#a1aab8"],
-    ["#aab2c0", "#d4dae4", "#aab2c0"],
-    ["#b4bcc8", "#dbe1e9", "#b4bcc8"],
+    ["#475569", "#64748b", "#475569"],
+    ["#3f4b5f", "#55637a", "#3f4b5f"],
+    ["#39445a", "#4b5772", "#39445a"],
+    ["#334155", "#475569", "#334155"],
   ],
 };
 
@@ -61,9 +56,8 @@ type Props = {
 };
 
 /**
- * Live speaking indicator: overlapping gradient ribbons that swell with
- * whoever is talking — blue/violet for the examiner, green/cyan for you.
- * Drawn transparently so it sits directly inside the white examiner card.
+ * Siri-inspired live speaking indicator: overlapping colour ribbons that swell
+ * with whoever is talking — blue/violet for the examiner, green/cyan for you.
  */
 export function SpeakingLiveWave({
   speaker,
@@ -80,12 +74,12 @@ export function SpeakingLiveWave({
 
   speakerRef.current = speaker;
   targetRef.current = !active
-    ? 0.05
+    ? 0.04
     : speaker === "candidate"
       ? 0.28 + Math.min(1, level * 2.4) * 0.72
       : speaker === "examiner"
         ? 0.7
-        : 0.1;
+        : 0.08;
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,8 +116,7 @@ export function SpeakingLiveWave({
       const peak = height * 0.36;
 
       ctx.clearRect(0, 0, width, height);
-      // Plain compositing — "lighter" would wash the ribbons out on white.
-      ctx.globalCompositeOperation = "source-over";
+      ctx.globalCompositeOperation = "lighter";
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
 
@@ -138,11 +131,10 @@ export function SpeakingLiveWave({
         const breathe = 0.82 + Math.sin(t * 0.0009 + i * 1.3) * 0.18;
 
         ctx.beginPath();
-        ctx.globalAlpha = wv.alpha;
         ctx.strokeStyle = grad;
         ctx.lineWidth = wv.lw;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = `${colors[1]}66`;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = colors[1];
 
         for (let x = 0; x <= width; x += 2) {
           const p = x / width;
@@ -161,8 +153,8 @@ export function SpeakingLiveWave({
         ctx.stroke();
       });
 
-      ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
     };
 
     frame = window.requestAnimationFrame(draw);
@@ -173,37 +165,42 @@ export function SpeakingLiveWave({
   }, []);
 
   return (
-    <div className={cn("relative overflow-hidden", className)}>
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1020] via-[#111827] to-[#0b1020] px-4 py-5 shadow-lg sm:px-6 sm:py-6",
+        className,
+      )}
+    >
       {/* soft coloured bloom behind the ribbons */}
       <div
         className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.13] blur-3xl transition-colors duration-500",
+          "pointer-events-none absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl transition-colors duration-500",
           speaker === "examiner"
             ? "bg-indigo-500"
             : speaker === "candidate"
               ? "bg-emerald-400"
-              : "bg-slate-400",
+              : "bg-slate-600",
         )}
         aria-hidden
       />
 
-      <canvas ref={canvasRef} className="relative block h-24 w-full sm:h-32" aria-hidden />
+      <canvas ref={canvasRef} className="relative block h-20 w-full sm:h-24" aria-hidden />
 
-      <div className="relative mt-2 text-center">
+      <div className="relative mt-3 text-center">
         <p
           className={cn(
-            "bg-gradient-to-r bg-clip-text text-sm font-semibold text-transparent transition-colors sm:text-base",
+            "text-sm font-semibold transition-colors sm:text-base",
             speaker === "examiner"
-              ? "from-sky-600 via-indigo-600 to-purple-600"
+              ? "text-indigo-200"
               : speaker === "candidate"
-                ? "from-emerald-600 via-teal-600 to-sky-600"
-                : "from-slate-600 via-slate-500 to-slate-600",
+                ? "text-emerald-200"
+                : "text-slate-300",
           )}
           aria-live="polite"
         >
           {label}
         </p>
-        {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+        {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
       </div>
     </div>
   );

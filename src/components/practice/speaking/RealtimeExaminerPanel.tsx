@@ -172,10 +172,10 @@ export function RealtimeExaminerPanel({
           </div>
         </div>
 
-        <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-
         {/* --------------------------------------- live speaking indicator */}
+        {/* The dark box is the separator — a rule above it as well reads as two. */}
         <SpeakingLiveWave
+          className="mt-5"
           speaker={speaker}
           level={state.micLevel}
           active={state.running || state.connecting}
