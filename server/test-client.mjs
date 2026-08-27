@@ -87,8 +87,13 @@ let playbackEndsAt = 0;          // when the examiner audio we received finishes
 let playbackTimer = null;
 let audioBytes = 0;
 let examinerSpeaking = false;
-/** The bridge's mic gate, mirrored exactly as the browser mirrors it. */
-let micOpen = false;
+/**
+ * The bridge's mic gate, mirrored exactly as the browser mirrors it — including
+ * failing open. A bridge that sends no mic frames (an older one still listening
+ * on this port) must not silently mute the candidate for the whole test.
+ */
+let micOpen = true;
+let sawMicFrame = false;
 let currentSegment = -1;
 let currentKind = null;
 let spokenFor = -1;
@@ -188,6 +193,7 @@ ws.on("message", (data, isBinary) => {
       console.log(`${stamp()}  ${ev.role === "examiner" ? "EXAMINER" : "CANDIDATE(heard)"}: ${ev.text}`);
       break;
     case "mic": {
+      sawMicFrame = true;
       micOpen = Boolean(ev.open);
       const overlapMs = playbackEndsAt - Date.now();
       if (micOpen && overlapMs > 250) {
@@ -241,6 +247,11 @@ ws.on("message", (data, isBinary) => {
 
 ws.on("close", (code) => {
   console.log(`${stamp()}  closed (${code}) — received ${(audioBytes / 1024).toFixed(0)} KB examiner audio`);
+  if (!sawMicFrame) {
+    console.log(
+      "WARNING: this bridge never sent a mic frame — it is running older code. Restart it (npm run realtime).",
+    );
+  }
   console.log(
     violations === 0
       ? "RESULT: nothing interrupted the examiner, and the mic never opened over its audio"

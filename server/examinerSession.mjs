@@ -57,8 +57,12 @@ export const CONFIG = {
    * makes an examiner talk over its candidate.
    */
   VAD_SILENCE_MS: num("REALTIME_VAD_SILENCE_MS", 1_100),
-  /** Raised from the API default: a low bar lets room noise open a turn. */
-  VAD_THRESHOLD: Number(process.env.REALTIME_VAD_THRESHOLD) || 0.62,
+  /**
+   * Mic sensitivity. Left at the API default: the gate already keeps the room
+   * out while the examiner talks, and a high bar here does the opposite damage
+   * — a quiet or distant candidate is simply never heard.
+   */
+  VAD_THRESHOLD: Number(process.env.REALTIME_VAD_THRESHOLD) || 0.5,
 
   /**
    * Grace after a transcript lands before the examiner is allowed to reply.
@@ -263,6 +267,10 @@ export class ExaminerSession {
     this.profile = {};
     /** Their last answer, restated to the model so it can react to it. */
     this.lastAnswer = "";
+    /** Mic chunks received since the gate last opened — 0 means nothing is arriving. */
+    this.audioSinceOpen = 0;
+    /** When the candidate's pause is long enough to count as the end of a turn. */
+    this.settleDeadline = 0;
 
     this.examinerBuf = "";
     /**
@@ -496,6 +504,7 @@ export class ExaminerSession {
   pushAudio(buf) {
     if (this.ended || this.preparing || !this.micOpen) return;
     if (this.upstream?.readyState !== WebSocket.OPEN) return;
+    this.audioSinceOpen += 1;
     this.record?.countAudio(buf.length, 0);
     this.up({ type: "input_audio_buffer.append", audio: buf.toString("base64") });
   }
@@ -517,6 +526,7 @@ export class ExaminerSession {
 
     if (open) {
       this.clearTimer("micGuard");
+      this.audioSinceOpen = 0;
       this.up({ type: "input_audio_buffer.clear" });
     } else {
       this.candidateSpeaking = false;
@@ -616,6 +626,7 @@ export class ExaminerSession {
     this.answerParts = [];
     this.clarifies = 0;
     this.unclears = 0;
+    this.settleDeadline = 0;
     // A directive queued for the segment that just ended is stale now.
     this.pendingDirective = null;
 
@@ -823,9 +834,20 @@ export class ExaminerSession {
       return;
     }
 
+    // Silence with no audio arriving at all is not a quiet candidate: the
+    // browser is not sending, so no amount of talking will ever be heard. Say
+    // so plainly in the log and on screen rather than blaming the candidate.
+    const micSilent = this.audioSinceOpen === 0;
+    if (micSilent) {
+      console.warn(
+        `[${this.sessionId}] no microphone audio has reached the bridge since the gate opened — ` +
+          `check the browser tab's mic permission, and that this bridge is the one the page is talking to`,
+      );
+    }
+
     this.nudges += 1;
     this.record.markQuestion(this.index, { nudges: this.nudges });
-    this.send({ t: "nudge", level: this.nudges, max: CONFIG.MAX_NUDGES, index: this.index });
+    this.send({ t: "nudge", level: this.nudges, max: CONFIG.MAX_NUDGES, index: this.index, micSilent });
     this.emitState(this.nudges >= CONFIG.MAX_NUDGES ? "no_response" : "nudging");
 
     const questionText = seg.kind === "ask" ? seg.text : "";
@@ -846,6 +868,11 @@ export class ExaminerSession {
     if (this.candidateSpeaking) return; // still going; the next transcript re-arms this
     const seg = this.current;
     if (!seg) return;
+
+    // The pause outlasted the settle window but the transcript is still in
+    // flight. Nothing can be judged yet — the transcript handler calls back the
+    // moment it lands, and `transcriptWait` covers one that never does.
+    if (!this.answerParts.length && this.heardSpeech && this.timers.has("transcriptWait")) return;
 
     // A role play is a conversation: reply in character every time they speak
     // and keep it going until the window closes, rather than treating the first
@@ -979,6 +1006,11 @@ export class ExaminerSession {
     switch (ev.type) {
       case "session.updated": {
         this.send({ t: "ready", sessionId: this.sessionId, total: this.segments.length });
+        // Tell the browser straight away that this bridge drives the mic gate.
+        // Without a first frame it cannot tell a bridge that keeps the gate shut
+        // from an older one that never sends frames at all, and it would rather
+        // listen to the room than leave the candidate muted all test.
+        this.send({ t: "mic", open: false });
         this.advance("start");
         break;
       }
@@ -1038,6 +1070,7 @@ export class ExaminerSession {
         // Still talking — an answer we thought had ended has not.
         this.clearTimer("answerSettle");
         this.clearTimer("transcriptWait");
+        this.settleDeadline = 0;
         // Barge-in: they answered over the tail of the question, so their turn
         // has plainly started — stop waiting for playback to drain.
         this.awaitingPlayback = false;
@@ -1070,6 +1103,14 @@ export class ExaminerSession {
         this.candidateSpeaking = false;
         this.send({ t: "candidate.speaking", speaking: false });
         if (this.preparing || this.answered) break;
+
+        // Start counting the pause here, not when the transcript lands.
+        // Transcription takes a few seconds, and waiting the settle window on
+        // top of it adds a silence the candidate reads as the examiner being
+        // slow. If they resume inside it, speech_started cancels this.
+        this.settleDeadline = Date.now() + CONFIG.ANSWER_SETTLE_MS;
+        this.setTimer("answerSettle", CONFIG.ANSWER_SETTLE_MS, () => this.onAnswerComplete());
+
         // Speech was heard, so an answer was attempted. If transcription never
         // returns anything usable the candidate still spoke — ask them to say it
         // again rather than silently crediting an answer nobody can assess.
@@ -1103,9 +1144,18 @@ export class ExaminerSession {
         this.rememberFromAnswer(text);
 
         // VAD ends a turn on a pause, and candidates at this level pause to
-        // think mid-answer. Wait a beat: if they carry on, the next sentence is
-        // part of the same answer and the examiner never talks over them.
-        this.setTimer("answerSettle", CONFIG.ANSWER_SETTLE_MS, () => this.onAnswerComplete());
+        // think mid-answer. The pause has to outlast the settle window before
+        // the examiner may reply; that clock started when they stopped talking,
+        // so by the time a transcript arrives it has usually already run out.
+        const waited = this.settleDeadline ? this.settleDeadline - Date.now() : CONFIG.ANSWER_SETTLE_MS;
+        if (waited <= 0 && !this.candidateSpeaking) {
+          this.clearTimer("answerSettle");
+          this.onAnswerComplete();
+        } else {
+          this.setTimer("answerSettle", Math.max(waited, 0) || CONFIG.ANSWER_SETTLE_MS, () =>
+            this.onAnswerComplete(),
+          );
+        }
         break;
       }
 

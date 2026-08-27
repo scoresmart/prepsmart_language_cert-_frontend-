@@ -228,10 +228,19 @@ export function RealtimeExaminerPanel({
         )}
 
         {state.nudgeLevel > 0 && state.phase !== "ended" && (
-          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-            {state.nudgeLevel >= state.nudgeMax
-              ? "No answer after three checks — the test is ending and your answers so far have been saved."
-              : `The examiner can't hear you (check ${state.nudgeLevel} of ${state.nudgeMax}). Check your microphone and answer when you're ready.`}
+          <p
+            className={cn(
+              "mt-4 rounded-lg border px-3 py-2 text-xs font-medium",
+              state.micSilent
+                ? "border-rose-200 bg-rose-50 text-rose-800"
+                : "border-amber-200 bg-amber-50 text-amber-800",
+            )}
+          >
+            {state.micSilent
+              ? "No sound at all is reaching the examiner. Check that this tab is allowed to use the microphone, that the right input device is selected, and that nothing else is holding it."
+              : state.nudgeLevel >= state.nudgeMax
+                ? "No answer after three checks — the test is ending and your answers so far have been saved."
+                : `The examiner can't hear you (check ${state.nudgeLevel} of ${state.nudgeMax}). Check your microphone and answer when you're ready.`}
           </p>
         )}
 

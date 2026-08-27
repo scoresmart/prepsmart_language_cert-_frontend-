@@ -87,9 +87,20 @@ Only one side has the floor at a time, and the microphone follows it.
   `REALTIME_MIC_REOPEN_MS`, and the upstream buffer is cleared first so no echo
   tail survives into the answer.
 - **While the candidate speaks** the examiner says nothing. A transcript does
-  not end the turn: the bridge waits `REALTIME_ANSWER_SETTLE_MS`, and if they
-  start again inside that window the next sentence joins the same answer. Only a
-  part running out of time may interrupt.
+  not end the turn: the pause has to outlast `REALTIME_ANSWER_SETTLE_MS`, timed
+  from when they stopped talking rather than from when the transcript lands, so
+  the wait costs nothing on top of transcription. If they start again inside the
+  window the next sentence joins the same answer. Only a part running out of
+  time may interrupt.
+
+> **Restart the bridge after changing anything in `server/`.** It is a long-lived
+> process — a stale one keeps the port and the page silently talks to old code.
+> The gate is designed to fail open, so a bridge that sends no mic frames leaves
+> the browser gating on playback alone rather than muting the candidate; the
+> smoke test prints a warning when it sees that. If the examiner hears nothing at
+> all, check the bridge's own log first: it says so in as many words
+> (`no microphone audio has reached the bridge since the gate opened`) and the
+> page shows a red notice.
 
 ### When an answer is thin, unclear, or missing
 
@@ -141,7 +152,7 @@ All optional; defaults are in `examinerSession.mjs`.
 | `REALTIME_MODEL` | `gpt-realtime` | Realtime model |
 | `REALTIME_VOICE` | `cedar` | Examiner voice |
 | `REALTIME_VAD_SILENCE_MS` | `1100` | Pause before VAD calls a turn finished |
-| `REALTIME_VAD_THRESHOLD` | `0.62` | Mic sensitivity — raise in a noisy room |
+| `REALTIME_VAD_THRESHOLD` | `0.5` | Mic sensitivity — raise in a noisy room |
 | `REALTIME_ANSWER_SETTLE_MS` | `1400` | Grace after a transcript before the examiner may reply |
 | `REALTIME_MIC_REOPEN_MS` | `250` | Mic stays shut this long after the examiner's audio ends |
 | `REALTIME_MIN_ANSWER_WORDS` | `3` | Below this, a long question's answer is asked to be developed |

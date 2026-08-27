@@ -115,7 +115,7 @@ export type RealtimeExamHandlers = {
   onTranscript?: (turn: RealtimeTranscriptTurn) => void;
   onExaminerSpeaking?: (speaking: boolean) => void;
   onCandidateSpeaking?: (speaking: boolean) => void;
-  onNudge?: (level: number, max: number, segmentIndex: number) => void;
+  onNudge?: (level: number, max: number, segmentIndex: number, micSilent?: boolean) => void;
   /** The examiner asked for more, or could not hear what was said. */
   onClarify?: (reason: string, level: number, max: number) => void;
   /** False while the microphone is deliberately shut (examiner speaking). */
@@ -256,10 +256,21 @@ export class RealtimeExamClient {
 
   /** The bridge says it is the candidate's turn. */
   private serverMicOpen = false;
+  /**
+   * The bridge has sent at least one mic frame, so it drives the gate.
+   *
+   * Until then the browser gates on playback alone. A bridge that never sends
+   * these — an older one still running on :8787 — must not leave the candidate
+   * muted for the whole test with no way to tell.
+   */
+  private sawMicFrame = false;
   /** Examiner audio is queued or playing out of the speakers. */
   private playbackBusy = false;
+  /** When the last examiner audio chunk arrived, for the stuck-playback check. */
+  private lastAudioAt = 0;
   private micMuted = true;
   private micReopenTimer: number | null = null;
+  private playbackWatchdog: number | null = null;
 
   sessionId: string | null = null;
 
@@ -335,23 +346,51 @@ export class RealtimeExamClient {
    * while examiner audio is still coming out of the speakers, and waits a beat
    * after it stops so the echo tail is never mistaken for an answer.
    */
-  private refreshMicGate() {
-    const shouldOpen = this.serverMicOpen && !this.playbackBusy && !this.stopped;
+  private gateShouldOpen(): boolean {
+    if (this.stopped || this.playbackBusy) return false;
+    // No mic frames from this bridge: fall back to gating on playback alone,
+    // which still keeps the examiner from hearing itself. Never stay shut.
+    return this.sawMicFrame ? this.serverMicOpen : true;
+  }
 
-    if (!shouldOpen) {
+  private refreshMicGate() {
+    if (!this.gateShouldOpen()) {
       if (this.micReopenTimer !== null) {
         window.clearTimeout(this.micReopenTimer);
         this.micReopenTimer = null;
       }
       this.setMicMuted(true);
+      this.armPlaybackWatchdog();
       return;
     }
 
     if (!this.micMuted || this.micReopenTimer !== null) return;
     this.micReopenTimer = window.setTimeout(() => {
       this.micReopenTimer = null;
-      if (this.serverMicOpen && !this.playbackBusy && !this.stopped) this.setMicMuted(false);
+      if (this.gateShouldOpen()) this.setMicMuted(false);
     }, MIC_REOPEN_MS);
+  }
+
+  /**
+   * Recover if the playback queue never reports draining.
+   *
+   * `onended` does not fire for a source scheduled while the tab is throttled
+   * or the context is suspended, and a `playbackBusy` that never clears would
+   * mute the candidate for the rest of the test.
+   */
+  private armPlaybackWatchdog() {
+    if (!this.playbackBusy || this.stopped || this.playbackWatchdog !== null) return;
+    this.playbackWatchdog = window.setTimeout(() => {
+      this.playbackWatchdog = null;
+      if (!this.playbackBusy || this.stopped) return;
+      // More audio has arrived recently — it really is still playing.
+      if (Date.now() - this.lastAudioAt < 1200) {
+        this.armPlaybackWatchdog();
+        return;
+      }
+      this.playbackBusy = false;
+      this.refreshMicGate();
+    }, 1500);
   }
 
   private setMicMuted(muted: boolean) {
@@ -455,6 +494,7 @@ export class RealtimeExamClient {
       // Examiner audio is on its way to the speakers — stop listening until it
       // has finished, so the room it is playing into is not captured.
       this.playbackBusy = true;
+      this.lastAudioAt = Date.now();
       this.refreshMicGate();
       this.playback?.push(new Int16Array(event.data));
       return;
@@ -532,6 +572,7 @@ export class RealtimeExamClient {
         break;
 
       case "mic":
+        this.sawMicFrame = true;
         this.serverMicOpen = Boolean(msg.open);
         this.refreshMicGate();
         break;
@@ -549,7 +590,12 @@ export class RealtimeExamClient {
         break;
 
       case "nudge":
-        this.handlers.onNudge?.(Number(msg.level ?? 1), Number(msg.max ?? 3), Number(msg.index ?? -1));
+        this.handlers.onNudge?.(
+          Number(msg.level ?? 1),
+          Number(msg.max ?? 3),
+          Number(msg.index ?? -1),
+          Boolean(msg.micSilent),
+        );
         break;
 
       case "saved":
@@ -600,8 +646,13 @@ export class RealtimeExamClient {
       window.clearTimeout(this.micReopenTimer);
       this.micReopenTimer = null;
     }
+    if (this.playbackWatchdog !== null) {
+      window.clearTimeout(this.playbackWatchdog);
+      this.playbackWatchdog = null;
+    }
     this.micMuted = true;
     this.serverMicOpen = false;
+    this.sawMicFrame = false;
     this.playbackBusy = false;
     try {
       this.node?.port.close();

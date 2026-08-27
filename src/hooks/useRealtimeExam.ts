@@ -38,6 +38,8 @@ export type RealtimeExamState = {
   clarifyReason: string | null;
   /** False while the microphone is deliberately shut — the examiner is talking. */
   micOpen: boolean;
+  /** No mic audio at all is reaching the bridge — a fault, not a quiet candidate. */
+  micSilent: boolean;
   /** What the examiner remembers about the candidate: name, home town, … */
   profile: Record<string, string>;
   transcript: RealtimeTranscriptTurn[];
@@ -68,6 +70,7 @@ const initialState: RealtimeExamState = {
   nudgeMax: 3,
   clarifyReason: null,
   micOpen: false,
+  micSilent: false,
   profile: {},
   transcript: [],
   summary: null,
@@ -133,6 +136,7 @@ export function useRealtimeExam(draftKey: string) {
             imageUrl: seg.imageUrl,
             nudgeLevel: 0,
             clarifyReason: null,
+            micSilent: false,
             prepareLeft: 0,
           }),
 
@@ -169,7 +173,8 @@ export function useRealtimeExam(draftKey: string) {
         onExaminerSpeaking: (speaking) => patch({ examinerSpeaking: speaking }),
         onCandidateSpeaking: (speaking) => patch({ candidateSpeaking: speaking }),
         onMicLevel: (level) => patch({ micLevel: level }),
-        onNudge: (level, max) => patch({ nudgeLevel: level, nudgeMax: max, clarifyReason: null }),
+        onNudge: (level, max, _index, micSilent) =>
+          patch({ nudgeLevel: level, nudgeMax: max, clarifyReason: null, micSilent: Boolean(micSilent) }),
         onClarify: (reason) => patch({ clarifyReason: reason }),
         onMicOpen: (open) => patch({ micOpen: open }),
         onProfile: (profile) => patch({ profile }),
