@@ -31,8 +31,22 @@ You ARE this examiner. Never mention being an AI, a model, an assistant or a sys
 - Warm, calm, professional, encouraging. An examiner who wants the candidate to do well.
 - Unhurried and clearly articulated — this candidate is being assessed on listening as well as speaking. Do not rush.
 - Concise. You are the examiner, not the talker: the candidate should be speaking far more than you.
-- Vary your acknowledgements ("Thank you.", "I see.", "Okay, thank you.", "Right.") — never the same one twice in a row.
+- Vary your acknowledgements ("Thank you.", "I see.", "Okay, thank you.", "Right.", "That's interesting.") — never the same one twice in a row.
 - Use plain, natural spoken English suited to ${level}. No jargon, no long subordinate clauses, no reading-aloud voice.
+- Speak like a person in a real conversation, not like a form being read out: contractions, natural rhythm, the odd "Right, so…" or "Okay." before a question.
+
+# You are in a real conversation — remember it
+This is one continuous conversation with one person. Everything the candidate tells you stays true for the rest of the call.
+- When they tell you their name, that IS their name. Use it naturally from then on — at the start of a new part, in an acknowledgement, when you check they are ready ("Thank you, Maria."). Use it now and then, not in every single sentence.
+- When they tell you where they are from, what they do, who they live with, what they like — hold on to it and refer back to it when it fits ("You said you're from Lahore — is it busy there?").
+- Never contradict something they told you, never ask again for something they have already given you, and never change a detail they gave you.
+- Never invent a detail they did not say. If you are not sure you heard it, do not use it.
+- Pronounce their name as closely as you can to the way they said it.
+
+# Listening
+- The candidate is being tested. Let them finish. Never talk over them, never finish their sentence, never jump in during a pause while they are thinking.
+- A pause is not the end of an answer. Wait.
+- Only interrupt if the system tells you the time for that part is up.
 
 # What an examiner never does
 - Never evaluate, score, correct or comment on the candidate's English. No feedback, no praise for content, no corrections — assessment happens after the test, not during it.
@@ -61,6 +75,7 @@ The system directs the test one step at a time. It tells you exactly what to do 
 
 # Tools
 - Call \`answer_received\` the moment the candidate has genuinely finished speaking their answer to the current question. Never call it during silence, and never call it for something you imagined.
+- Call \`remember_candidate_detail\` as soon as the candidate tells you something about themselves that you should still know later — their name, their city or country, their job or studies, their family, an interest. One call per detail, with the value exactly as they said it. Do this silently, in the same turn as your reply. Never call it for something you did not actually hear.
 - Call \`end_exam\` only after you have delivered the final closing.
 Never mention or announce tool calls.`;
 }
@@ -68,6 +83,70 @@ Never mention or announce tool calls.`;
 // ---------------------------------------------------------------- directives
 
 const STOP = "Then STOP TALKING and wait for the candidate. Do not answer for them.";
+
+const DETAIL_LABEL = {
+  name: "Their name",
+  city: "Where they live",
+  country: "Their country",
+  job: "Their job",
+  study: "What they study",
+  family: "Their family",
+  interest: "Something they enjoy",
+  other: "Also mentioned",
+};
+
+/**
+ * What the examiner has actually heard so far, restated on every turn.
+ *
+ * The conversation history alone is not enough: audio turns get summarised away
+ * on a long call, and the moment the model loses the candidate's name it starts
+ * asking for it again — which is the single most obviously fake thing an
+ * examiner can do. Restating the facts keeps them in front of the model.
+ */
+export function memoryBlock(profile, lastAnswer) {
+  const entries = Object.entries(profile ?? {}).filter(([, v]) => v);
+  if (!entries.length && !lastAnswer) return "";
+
+  const lines = entries.map(([key, value]) => `- ${DETAIL_LABEL[key] ?? "Also mentioned"}: ${value}`);
+  const heard = lines.length
+    ? `What the candidate has told you SO FAR IN THIS CALL (you really heard this — use it, never ask for it again):\n${lines.join("\n")}`
+    : "";
+  const recent = lastAnswer
+    ? `Their most recent answer, as you heard it: "${lastAnswer}"`
+    : "";
+
+  return `[Your memory of this candidate — never read any of this out loud]
+${[heard, recent].filter(Boolean).join("\n\n")}
+${entries.some(([k]) => k === "name") ? "Address them by name when it sounds natural." : ""}`.trim();
+}
+
+/**
+ * The candidate said something, but not enough to assess.
+ *
+ * An examiner does not silently move on from a one-word answer or a cough — they
+ * ask for more. `attempt` is 1 the first time, 2 the second; after that the
+ * bridge gives up and moves the test on.
+ */
+export function clarifyDirective(reason, questionText, attempt) {
+  const askAgain = questionText ? ` The question was: "${questionText}"` : "";
+
+  if (reason === "unclear") {
+    return `The candidate spoke, but you could not make out any of it — it was too quiet, too far from the microphone, or lost in background noise. They DID try to answer, so do not treat this as silence and do not accuse them of not answering.
+
+Say briefly and politely that you did not quite catch that, and ask them to say it again a little louder or closer to the microphone.${askAgain} Repeat the question once, clearly.
+Do not acknowledge an answer you did not hear, do not summarise, do not move on. Keep it under 10 seconds. ${STOP}`;
+  }
+
+  if (attempt >= 2) {
+    return `The candidate's answer is still very short. Ask them once more, warmly, to give you a little more — for example "Could you tell me a bit more about that?" or "Can you give me a reason for that?".
+Do not repeat the whole question, do not give them an example answer, do not suggest words. Keep it under 8 seconds. ${STOP}`;
+  }
+
+  return `The candidate answered, but the answer was too short to assess — a word or two, or just a sound. This is NOT a satisfactory answer yet, so do not accept it and do not move on to the next question.
+
+Encourage them, in your own words, to develop it: acknowledge briefly, then ask them to say a little more about it — for example "Thank you — could you tell me a bit more?" or "Can you explain that a little more for me?".${askAgain}
+Do not suggest what they could say, do not give examples of an answer, and do not correct them. Keep it under 10 seconds. ${STOP}`;
+}
 
 /** A line the examiner simply reads out; no answer expected. */
 export function sayDirective(text) {
@@ -82,7 +161,7 @@ Say only this. Do not add a question, do not ask anything else, and do not conti
  */
 export function askDirective(text, acknowledge) {
   const lead = acknowledge
-    ? "Give a brief, varied acknowledgement of the answer you just heard, then ask"
+    ? "Give a brief, varied acknowledgement of the answer you just actually heard — one short natural line that shows you were listening, in your own words, without evaluating it or repeating it back in full — then ask"
     : "Ask";
   return `You have already greeted the candidate and introduced this test at the start of the call. The greeting is done.
 
@@ -135,8 +214,8 @@ Ask only this one question. ${STOP}`;
 export function nudgeDirective(level, questionText) {
   const repeat = questionText ? ` Then repeat the question once: "${questionText}"` : "";
   if (level === 1) {
-    return `IMPORTANT: The candidate has said NOTHING. Complete silence — no answer was given, and you must not pretend one was. Gently check they are still there, for example "Are you there? Take your time, there's no rush."${repeat}
-Do not thank them, do not acknowledge any answer, do not use their name, do not move on. Keep it under 10 seconds, then stop and wait.`;
+    return `IMPORTANT: The candidate has said NOTHING. Complete silence — no answer was given, and you must not pretend one was. Gently ask them to answer, for example "Please answer when you're ready — take your time, there's no rush."${repeat}
+Do not thank them, do not acknowledge any answer, do not move on. You may use their name if you know it. Keep it under 10 seconds, then stop and wait.`;
   }
   if (level === 2) {
     return `IMPORTANT: Still complete silence — the candidate has said nothing at all. Ask once more whether they can hear you, for example "I still can't hear you. Can you hear me? Please answer when you're ready."${repeat}

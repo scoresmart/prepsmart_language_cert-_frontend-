@@ -51,8 +51,9 @@ npm run build && grep -r "sk-proj" dist   # must find nothing
 
 ## How a test runs
 
-1. Browser opens the mic **once** and keeps it open for the whole test. It is
-   never cycled between questions.
+1. Browser opens the mic **once** and holds the device for the whole test — no
+   permission prompt ever appears mid-exam. Capture is gated in software (see
+   *Turn-taking and noise* below), so nothing is sent while the examiner talks.
 2. Bridge configures the session: examiner persona + the admin's script +
    server-side VAD, then tells the examiner to greet and ask question 1.
 3. Examiner says *"Hi there, I'm your LanguageCert examiner…"*, introduces the
@@ -72,23 +73,51 @@ silence and then try to advance off it. The bridge only advances when real
 speech was actually transcribed, so an imagined answer can never move the
 script (`ignoring premature next_question` in the log).
 
-### Silence handling
+### Turn-taking and noise
 
-| Elapsed silence | What happens |
+Only one side has the floor at a time, and the microphone follows it.
+
+- **While the examiner speaks** the gate is **shut**: the worklet stops
+  capturing (with a short fade, so no click is heard as speech) and the bridge
+  drops anything that still arrives. A door, a fan or the examiner's own voice
+  coming back through the speakers therefore cannot open a turn — and
+  `interrupt_response` is off upstream, so nothing can cut a question in half.
+- **When its audio has actually finished playing** — the browser confirms the
+  drain, not the model finishing generation — the gate opens after
+  `REALTIME_MIC_REOPEN_MS`, and the upstream buffer is cleared first so no echo
+  tail survives into the answer.
+- **While the candidate speaks** the examiner says nothing. A transcript does
+  not end the turn: the bridge waits `REALTIME_ANSWER_SETTLE_MS`, and if they
+  start again inside that window the next sentence joins the same answer. Only a
+  part running out of time may interrupt.
+
+### When an answer is thin, unclear, or missing
+
+| What the bridge sees | What the examiner does |
 | --- | --- |
-| `REALTIME_NUDGE_1_MS` (8s) | *"Are you there? Take your time, there's no rush."* + repeats the question |
-| `+ REALTIME_NUDGE_2_MS` (10s) | *"I'm sorry, I can't hear you. I'll move on."* |
-| `+ REALTIME_SKIP_GRACE_MS` (6s) | Question marked `skipped`, examiner moves on |
+| Speech, but nothing transcribable (too quiet, lost in noise) | *"I didn't quite catch that…"* and repeats the question — up to `REALTIME_MAX_CLARIFY` times |
+| A word or two, or just a filler sound, on a question worth 20s or more | Asks them to develop it — *"Could you tell me a bit more?"* — up to `REALTIME_MAX_CLARIFY` times |
+| Nothing added after that | Accepts what they gave and moves on |
+| Silence for `REALTIME_NUDGE_MS` (8s) | *"Please answer when you're ready"*, then repeats the question |
+| Silence through `REALTIME_MAX_NUDGES` (3) checks | Says it cannot hear them, saves the answers, ends the test |
+
+### What the examiner remembers
+
+The candidate's name, home town and anything else they volunteer are held for
+the whole call — read off the transcript by the bridge and recorded by the model
+through `remember_candidate_detail` — and restated to the model on every turn.
+It uses their name, refers back to what they said, and never asks twice for
+something they have already given. They are saved with the transcript under
+`profile`.
 
 ### Resource guards
 
 Nothing here keeps a billed session alive longer than it is useful:
 
 - Browser disconnects → upstream socket closed immediately.
-- 2 consecutive unanswered questions → test abandoned (no closing speech — nobody is listening).
-- Candidate never speaks at all within 75s → abandoned.
-- 15-minute exam ceiling, 17-minute hard kill.
-- Per-answer cap of the admin's timer + 15s slack.
+- Three silent checks with no speech at all → the examiner closes the test and the answers so far are saved.
+- 20-minute exam ceiling, 22-minute hard kill.
+- Per-answer cap of the admin's timer + 10s slack.
 - Max 4 concurrent exams; a client that connects without starting is dropped after 30s.
 
 ## Auto-save
@@ -111,14 +140,18 @@ All optional; defaults are in `examinerSession.mjs`.
 | `REALTIME_BRIDGE_PORT` | `8787` | Bridge port |
 | `REALTIME_MODEL` | `gpt-realtime` | Realtime model |
 | `REALTIME_VOICE` | `cedar` | Examiner voice |
-| `REALTIME_VAD_SILENCE_MS` | `700` | Pause before the examiner takes its turn |
-| `REALTIME_VAD_THRESHOLD` | `0.5` | Mic sensitivity — raise in a noisy room |
-| `REALTIME_NUDGE_1_MS` | `8000` | Silence before *"are you there?"* |
-| `REALTIME_NUDGE_2_MS` | `10000` | Further silence before moving on |
-| `REALTIME_MAX_EXAM_MS` | `900000` | 15-minute ceiling |
-| `REALTIME_MAX_CONSECUTIVE_SKIPS` | `2` | Unanswered questions before abandoning |
+| `REALTIME_VAD_SILENCE_MS` | `1100` | Pause before VAD calls a turn finished |
+| `REALTIME_VAD_THRESHOLD` | `0.62` | Mic sensitivity — raise in a noisy room |
+| `REALTIME_ANSWER_SETTLE_MS` | `1400` | Grace after a transcript before the examiner may reply |
+| `REALTIME_MIC_REOPEN_MS` | `250` | Mic stays shut this long after the examiner's audio ends |
+| `REALTIME_MIN_ANSWER_WORDS` | `3` | Below this, a long question's answer is asked to be developed |
+| `REALTIME_MAX_CLARIFY` | `2` | How often the examiner asks for more before accepting |
+| `REALTIME_NUDGE_MS` | `8000` | Silence before *"please answer when you're ready"* |
+| `REALTIME_MAX_NUDGES` | `3` | Silent checks before the test is abandoned |
+| `REALTIME_FINAL_GRACE_MS` | `8000` | Grace after the last check |
+| `REALTIME_MAX_EXAM_MS` | `1200000` | 20-minute ceiling (`REALTIME_HARD_KILL_MS`: 22) |
 | `REALTIME_MAX_CONCURRENT` | `4` | Concurrent exams |
-| `REALTIME_DEBUG` | off | Log every script decision |
+| `REALTIME_DEBUG` | off | Log every script decision, and each mic gate change |
 
 ## Before deploying
 

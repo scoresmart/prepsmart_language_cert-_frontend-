@@ -34,6 +34,12 @@ export type RealtimeExamState = {
   micLevel: number;
   nudgeLevel: number;
   nudgeMax: number;
+  /** Set while the examiner has asked for more, or could not hear the answer. */
+  clarifyReason: string | null;
+  /** False while the microphone is deliberately shut — the examiner is talking. */
+  micOpen: boolean;
+  /** What the examiner remembers about the candidate: name, home town, … */
+  profile: Record<string, string>;
   transcript: RealtimeTranscriptTurn[];
   summary: RealtimeExamSummary | null;
   endReason: string | null;
@@ -60,6 +66,9 @@ const initialState: RealtimeExamState = {
   micLevel: 0,
   nudgeLevel: 0,
   nudgeMax: 3,
+  clarifyReason: null,
+  micOpen: false,
+  profile: {},
   transcript: [],
   summary: null,
   endReason: null,
@@ -123,6 +132,7 @@ export function useRealtimeExam(draftKey: string) {
             progress: seg.progress,
             imageUrl: seg.imageUrl,
             nudgeLevel: 0,
+            clarifyReason: null,
             prepareLeft: 0,
           }),
 
@@ -159,7 +169,10 @@ export function useRealtimeExam(draftKey: string) {
         onExaminerSpeaking: (speaking) => patch({ examinerSpeaking: speaking }),
         onCandidateSpeaking: (speaking) => patch({ candidateSpeaking: speaking }),
         onMicLevel: (level) => patch({ micLevel: level }),
-        onNudge: (level, max) => patch({ nudgeLevel: level, nudgeMax: max }),
+        onNudge: (level, max) => patch({ nudgeLevel: level, nudgeMax: max, clarifyReason: null }),
+        onClarify: (reason) => patch({ clarifyReason: reason }),
+        onMicOpen: (open) => patch({ micOpen: open }),
+        onProfile: (profile) => patch({ profile }),
 
         onSaved: (summary) => patch({ summary }),
 
@@ -173,6 +186,7 @@ export function useRealtimeExam(draftKey: string) {
             summary: summary ?? null,
             examinerSpeaking: false,
             candidateSpeaking: false,
+            micOpen: false,
             micLevel: 0,
             prepareLeft: 0,
             progress: 100,

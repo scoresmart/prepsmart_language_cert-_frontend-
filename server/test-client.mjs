@@ -87,6 +87,8 @@ let playbackEndsAt = 0;          // when the examiner audio we received finishes
 let playbackTimer = null;
 let audioBytes = 0;
 let examinerSpeaking = false;
+/** The bridge's mic gate, mirrored exactly as the browser mirrors it. */
+let micOpen = false;
 let currentSegment = -1;
 let currentKind = null;
 let spokenFor = -1;
@@ -126,12 +128,15 @@ ws.on("open", () => {
     }),
   );
 
-  // A steady 20 ms mic stream: candidate audio when we have it, silence otherwise.
+  // A steady 20 ms mic stream: candidate audio when we have it, silence
+  // otherwise — and nothing at all while the gate is shut, which is what the
+  // browser does so the examiner never hears itself or the room.
   const mic = setInterval(() => {
     if (ws.readyState !== WebSocket.OPEN) {
       clearInterval(mic);
       return;
     }
+    if (!micOpen) return;
     if (outbound.length >= CHUNK) {
       ws.send(outbound.subarray(0, CHUNK), { binary: true });
       outbound = outbound.subarray(CHUNK);
@@ -182,6 +187,27 @@ ws.on("message", (data, isBinary) => {
     case "transcript":
       console.log(`${stamp()}  ${ev.role === "examiner" ? "EXAMINER" : "CANDIDATE(heard)"}: ${ev.text}`);
       break;
+    case "mic": {
+      micOpen = Boolean(ev.open);
+      const overlapMs = playbackEndsAt - Date.now();
+      if (micOpen && overlapMs > 250) {
+        violations += 1;
+        console.log(
+          `${stamp()}  !!! VIOLATION: mic opened with ${(overlapMs / 1000).toFixed(1)}s of examiner audio still playing`,
+        );
+      } else {
+        console.log(`${stamp()}  --- mic ${micOpen ? "OPEN — candidate's turn" : "SHUT — examiner has the floor"}`);
+      }
+      break;
+    }
+    case "clarify":
+      console.log(
+        `${stamp()}  *** CLARIFY (${ev.reason}) ${ev.level}/${ev.max} on segment ${ev.index + 1} — examiner asking for a real answer`,
+      );
+      break;
+    case "profile":
+      console.log(`${stamp()}  --- remembers: ${JSON.stringify(ev.profile)}`);
+      break;
     case "nudge": {
       const overlapMs = playbackEndsAt - Date.now();
       if (overlapMs > 250) {
@@ -215,7 +241,11 @@ ws.on("message", (data, isBinary) => {
 
 ws.on("close", (code) => {
   console.log(`${stamp()}  closed (${code}) — received ${(audioBytes / 1024).toFixed(0)} KB examiner audio`);
-  console.log(violations === 0 ? "RESULT: no nudge interrupted the examiner" : `RESULT: ${violations} VIOLATION(S)`);
+  console.log(
+    violations === 0
+      ? "RESULT: nothing interrupted the examiner, and the mic never opened over its audio"
+      : `RESULT: ${violations} VIOLATION(S)`,
+  );
   process.exit(0);
 });
 ws.on("error", (e) => {

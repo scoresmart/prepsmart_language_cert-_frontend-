@@ -77,7 +77,9 @@ export function RealtimeExaminerPanel({
   // question — not just while a segment message happens to carry the URL.
   const inPart3 = state.part === 3 && state.phase !== "idle" && state.phase !== "ended";
 
-  const candidateActive = state.candidateSpeaking || state.micLevel > 0.04;
+  // The mic is shut on purpose while the examiner talks, so a level reading can
+  // only be stale — never draw the candidate as speaking then.
+  const candidateActive = state.micOpen && (state.candidateSpeaking || state.micLevel > 0.04);
   const speaker: LiveSpeaker = state.examinerSpeaking
     ? "examiner"
     : state.running && !preparing && candidateActive
@@ -97,10 +99,12 @@ export function RealtimeExaminerPanel({
   const waveHint = preparing
     ? "Think about your answer — don't speak yet."
     : state.running
-      ? state.segmentLabel || undefined
+      ? state.examinerSpeaking || !state.micOpen
+        ? "Listen — your microphone opens when the examiner finishes."
+        : state.segmentLabel || undefined
       : state.phase === "ended"
         ? undefined
-        : "Your microphone stays on for the whole test.";
+        : "Your microphone opens as soon as the examiner stops speaking.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -213,6 +217,14 @@ export function RealtimeExaminerPanel({
               </p>
             </div>
           </div>
+        )}
+
+        {state.clarifyReason && state.nudgeLevel === 0 && state.phase !== "ended" && (
+          <p className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-800">
+            {state.clarifyReason === "unclear"
+              ? "The examiner couldn't make out what you said — speak a little louder, closer to the microphone."
+              : "That answer was very short. The examiner has asked you to say a bit more before moving on."}
+          </p>
         )}
 
         {state.nudgeLevel > 0 && state.phase !== "ended" && (

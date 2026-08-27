@@ -10,12 +10,23 @@
 
 const CHUNK_SAMPLES = 480; // 20 ms @ 24 kHz
 
+/**
+ * Samples the gate takes to open or close (~5 ms @ 24 kHz).
+ *
+ * Cutting the stream dead on a sample boundary puts a click into the audio, and
+ * a click is a transient loud enough for server-side VAD to hear as speech —
+ * the very thing muting is there to prevent.
+ */
+const RAMP_SAMPLES = 120;
+
 class MicPcm16Processor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.buffer = new Int16Array(CHUNK_SAMPLES);
     this.offset = 0;
     this.muted = false;
+    /** Current gate position: 1 fully open, 0 fully shut. */
+    this.gain = 1;
     this.port.onmessage = (e) => {
       if (e.data?.type === "mute") this.muted = Boolean(e.data.value);
     };
@@ -25,9 +36,15 @@ class MicPcm16Processor extends AudioWorkletProcessor {
     const channel = inputs[0] && inputs[0][0];
     if (!channel) return true;
 
+    const target = this.muted ? 0 : 1;
+    const step = 1 / RAMP_SAMPLES;
+
     let peak = 0;
     for (let i = 0; i < channel.length; i++) {
-      let s = this.muted ? 0 : channel[i];
+      if (this.gain < target) this.gain = Math.min(target, this.gain + step);
+      else if (this.gain > target) this.gain = Math.max(target, this.gain - step);
+
+      let s = channel[i] * this.gain;
       if (s > 1) s = 1;
       else if (s < -1) s = -1;
       const abs = s < 0 ? -s : s;

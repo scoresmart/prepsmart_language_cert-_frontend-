@@ -5,14 +5,26 @@
  * PCM16 mic audio up, PCM16 examiner audio down, JSON control frames both ways.
  * The OpenAI key never reaches this file — the bridge holds it.
  *
- * The microphone is opened once at the start of the test and stays open until
- * the test ends. It is never cycled between questions.
+ * The microphone device is opened once at the start of the test and released
+ * only when it ends — no permission prompt ever appears mid-exam. Capture is
+ * gated in software instead: nothing is sent while the examiner is speaking or
+ * while its audio is still playing, so room noise and speaker echo can never be
+ * mistaken for the candidate answering.
  */
 
 import { supabase } from "./supabase/client";
 
 const SAMPLE_RATE = 24000;
 const WORKLET_URL = "/realtime-mic-worklet.js";
+
+/**
+ * How long the microphone stays shut after the examiner's last sample.
+ *
+ * Echo cancellation is not perfect on laptop speakers, and the tail of the
+ * examiner's own voice coming back in is heard upstream as the candidate
+ * starting to talk — which cuts the question short.
+ */
+const MIC_REOPEN_MS = 200;
 
 export type RealtimeExamPhase =
   | "idle"
@@ -104,6 +116,12 @@ export type RealtimeExamHandlers = {
   onExaminerSpeaking?: (speaking: boolean) => void;
   onCandidateSpeaking?: (speaking: boolean) => void;
   onNudge?: (level: number, max: number, segmentIndex: number) => void;
+  /** The examiner asked for more, or could not hear what was said. */
+  onClarify?: (reason: string, level: number, max: number) => void;
+  /** False while the microphone is deliberately shut (examiner speaking). */
+  onMicOpen?: (open: boolean) => void;
+  /** What the examiner now knows about the candidate: name, home town, … */
+  onProfile?: (profile: Record<string, string>) => void;
   onMicLevel?: (level: number) => void;
   onSaved?: (summary: RealtimeExamSummary) => void;
   onDone?: (reason: string, summary: RealtimeExamSummary | null) => void;
@@ -236,6 +254,13 @@ export class RealtimeExamClient {
   private handlers: RealtimeExamHandlers;
   private stopped = false;
 
+  /** The bridge says it is the candidate's turn. */
+  private serverMicOpen = false;
+  /** Examiner audio is queued or playing out of the speakers. */
+  private playbackBusy = false;
+  private micMuted = true;
+  private micReopenTimer: number | null = null;
+
   sessionId: string | null = null;
 
   constructor(handlers: RealtimeExamHandlers = {}) {
@@ -269,6 +294,9 @@ export class RealtimeExamClient {
     await this.ctx.audioWorklet.addModule(WORKLET_URL);
 
     this.playback = new PlaybackQueue(this.ctx, () => {
+      // The examiner has actually been heard, not merely generated.
+      this.playbackBusy = false;
+      this.refreshMicGate();
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ t: "playback.done" }));
       }
@@ -281,14 +309,57 @@ export class RealtimeExamClient {
     });
     this.source.connect(this.node);
 
+    // The candidate's turn has not started yet: nothing is captured until the
+    // bridge opens the gate, so the greeting can never be talked over by a door
+    // closing or a fan behind the candidate.
+    this.micMuted = true;
+    this.node.port.postMessage({ type: "mute", value: true });
+
     this.node.port.onmessage = (e: MessageEvent) => {
       const data = e.data as { type: string; buffer: ArrayBuffer; peak: number };
       if (data?.type !== "pcm") return;
-      this.handlers.onMicLevel?.(data.peak);
+      this.handlers.onMicLevel?.(this.micMuted ? 0 : data.peak);
+      // Muted frames are silence; sending them would only keep the upstream
+      // buffer fed with the room the examiner is talking into.
+      if (this.micMuted) return;
       if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data.buffer);
     };
 
     await this.openSocket(config, url);
+  }
+
+  /**
+   * Open or shut the microphone at source.
+   *
+   * The bridge decides whose turn it is; the browser also refuses to capture
+   * while examiner audio is still coming out of the speakers, and waits a beat
+   * after it stops so the echo tail is never mistaken for an answer.
+   */
+  private refreshMicGate() {
+    const shouldOpen = this.serverMicOpen && !this.playbackBusy && !this.stopped;
+
+    if (!shouldOpen) {
+      if (this.micReopenTimer !== null) {
+        window.clearTimeout(this.micReopenTimer);
+        this.micReopenTimer = null;
+      }
+      this.setMicMuted(true);
+      return;
+    }
+
+    if (!this.micMuted || this.micReopenTimer !== null) return;
+    this.micReopenTimer = window.setTimeout(() => {
+      this.micReopenTimer = null;
+      if (this.serverMicOpen && !this.playbackBusy && !this.stopped) this.setMicMuted(false);
+    }, MIC_REOPEN_MS);
+  }
+
+  private setMicMuted(muted: boolean) {
+    if (this.micMuted === muted) return;
+    this.micMuted = muted;
+    this.node?.port.postMessage({ type: "mute", value: muted });
+    if (muted) this.handlers.onMicLevel?.(0);
+    this.handlers.onMicOpen?.(!muted);
   }
 
   private openSocket(config: RealtimeExamConfig, url: string): Promise<void> {
@@ -381,6 +452,10 @@ export class RealtimeExamClient {
 
   private onMessage(event: MessageEvent) {
     if (event.data instanceof ArrayBuffer) {
+      // Examiner audio is on its way to the speakers — stop listening until it
+      // has finished, so the room it is playing into is not captured.
+      this.playbackBusy = true;
+      this.refreshMicGate();
       this.playback?.push(new Int16Array(event.data));
       return;
     }
@@ -452,6 +527,25 @@ export class RealtimeExamClient {
 
       case "audio.clear":
         this.playback?.clear();
+        this.playbackBusy = false;
+        this.refreshMicGate();
+        break;
+
+      case "mic":
+        this.serverMicOpen = Boolean(msg.open);
+        this.refreshMicGate();
+        break;
+
+      case "profile":
+        this.handlers.onProfile?.((msg.profile ?? {}) as Record<string, string>);
+        break;
+
+      case "clarify":
+        this.handlers.onClarify?.(
+          String(msg.reason ?? "thin"),
+          Number(msg.level ?? 1),
+          Number(msg.max ?? 2),
+        );
         break;
 
       case "nudge":
@@ -502,6 +596,13 @@ export class RealtimeExamClient {
   }
 
   private teardownAudio() {
+    if (this.micReopenTimer !== null) {
+      window.clearTimeout(this.micReopenTimer);
+      this.micReopenTimer = null;
+    }
+    this.micMuted = true;
+    this.serverMicOpen = false;
+    this.playbackBusy = false;
     try {
       this.node?.port.close();
       this.node?.disconnect();
