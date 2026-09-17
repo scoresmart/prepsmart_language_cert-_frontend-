@@ -18,7 +18,9 @@ import {
   converseContinueDirective,
   converseDirective,
   generatedDirective,
+  firstName,
   memoryBlock,
+  nameCue,
   nudgeDirective,
   prepareDirective,
   sayDirective,
@@ -176,13 +178,19 @@ export function extractProfile(question, answer) {
   if (!a) return {};
   const found = {};
 
-  const asksName = /\byour name\b|\bcall you\b|\bwho am i speaking\b/.test(q);
+  // "What is your full name?" is the default opener — "your name" alone misses it.
+  const asksName = /\byour (?:(?:full|first|given|whole) )?name\b|\bcall you\b|\bwho am i speaking\b/.test(q);
   const asksPlace = /where (are|do) you (from|live|come)|which (city|town|country)|whereabouts/.test(q);
 
   const NAME_LIKE = "([A-Za-z][A-Za-z'’-]{1,20}(?:\\s+[A-Za-z][A-Za-z'’-]{1,20})?)";
   // "My name is Ravi" says so outright. "I'm …" only means a name when the
   // question asked for one — otherwise it is "I'm from Lahore" or "I'm fine".
-  const stated = a.match(new RegExp(`\\b(?:my name(?:'s| is)|they call me|you can call me|call me|this is)\\s+${NAME_LIKE}`, "i"));
+  const stated = a.match(
+    new RegExp(
+      `\\b(?:my (?:(?:full|first|whole) )?name(?:'s| is)|they call me|you can call me|call me|this is)\\s+${NAME_LIKE}`,
+      "i",
+    ),
+  );
   const implied = a.match(new RegExp(`\\b(?:i am|i'm|im)\\s+${NAME_LIKE}`, "i"));
   const notAName = /^(?:from|in|at|a|an|the|not|very|really|fine|good|great|well|okay|sorry|here|ready|going|doing|working|living|studying|nervous|happy|glad)\b/i;
 
@@ -193,9 +201,15 @@ export function extractProfile(question, answer) {
   if (isName(stated)) found.name = clean(stated[1]);
   else if (asksName && isName(implied)) found.name = clean(implied[1]);
   else if (asksName) {
-    const words = a.replace(/[^A-Za-z'’\s-]/g, " ").trim().split(/\s+/).filter(Boolean);
+    const words = a
+      .replace(/^\s*(?:it's|it is|its|sure|okay|ok|yes|so|um|uh|er)[,.\s]+/i, "")
+      .replace(/^\s*(?:it's|it is|its)\s+/i, "")
+      .replace(/[^A-Za-z'’\s-]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
     // "Ravi" / "Ravi Kumar" — a bare name is the usual answer here.
-    if (words.length && words.length <= 3) found.name = clean(words.slice(0, 2).join(" "));
+    if (words.length && words.length <= 3) found.name = clean(words.slice(0, 3).join(" "));
   }
 
   const placed = a.match(
@@ -265,6 +279,10 @@ export class ExaminerSession {
     this.unclears = 0;
     /** Everything the candidate has told us about themselves, for continuity. */
     this.profile = {};
+    /** The examiner has addressed the candidate by name at least once. */
+    this.nameSaid = false;
+    /** Examiner turns since it last said the candidate's name. */
+    this.turnsSinceName = Infinity;
     /** Their last answer, restated to the model so it can react to it. */
     this.lastAnswer = "";
     /** Mic chunks received since the gate last opened — 0 means nothing is arriving. */
@@ -548,17 +566,50 @@ export class ExaminerSession {
 
   // ----------------------------------------------------- response plumbing
 
+  /**
+   * How the candidate's name should be used on a turn of this kind.
+   * `moment`: part_start | question | check | closing | roleplay | other.
+   */
+  nameMode(moment) {
+    if (!this.profile.name || moment === "roleplay") return null;
+    if (!this.nameSaid) return "first";
+    if (this.turnsSinceName < 2) return moment === "closing" ? "must" : "avoid";
+    if (moment === "part_start" || moment === "check" || moment === "closing") return "must";
+    if (moment === "question" && this.turnsSinceName >= 5) return "must";
+    return "optional";
+  }
+
   /** Facts about this candidate, restated so a long call cannot lose them. */
-  withMemory(directive) {
+  withMemory(directive, moment = "other") {
     const block = memoryBlock(this.profile, this.lastAnswer);
-    return block ? `${block}\n\n${directive}` : directive;
+    const mode = this.nameMode(moment);
+    // One chance at the "nice to meet you": if the transcript spells the name
+    // differently, the examiner must not greet them again on every turn.
+    if (mode === "first") this.nameSaid = true;
+    // The cue goes last so it is the freshest thing the model reads.
+    const cue = mode ? nameCue(this.profile.name, mode) : "";
+    return [block, directive, cue].filter(Boolean).join("\n\n");
+  }
+
+  /** Track whether the examiner actually said the name, so it is not overused. */
+  noteExaminerTurn(text) {
+    const first = firstName(this.profile.name);
+    if (!first) return;
+    const escaped = first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) {
+      this.nameSaid = true;
+      this.turnsSinceName = 0;
+    } else if (this.nameSaid) {
+      this.turnsSinceName = Number.isFinite(this.turnsSinceName) ? this.turnsSinceName + 1 : 1;
+    }
   }
 
   /**
    * @param {string} directive
    * @param {string} [tag]
-   * @param {{ urgent?: boolean }} [opts] `urgent` speaks over the candidate —
-   *   only for the deliberate interruptions (time up, closing the test).
+   * @param {{ urgent?: boolean, moment?: string }} [opts] `urgent` speaks over
+   *   the candidate — only for the deliberate interruptions (time up, closing
+   *   the test). `moment` decides whether the candidate's name is used.
    */
   speak(directive, tag, opts = {}) {
     if (this.ended) return;
@@ -575,7 +626,7 @@ export class ExaminerSession {
       item: {
         type: "message",
         role: "system",
-        content: [{ type: "input_text", text: this.withMemory(directive) }],
+        content: [{ type: "input_text", text: this.withMemory(directive, opts.moment) }],
       },
     });
     this.up({ type: "response.create" });
@@ -658,20 +709,23 @@ export class ExaminerSession {
     switch (seg.kind) {
       case "say":
         this.emitState("examiner");
-        this.speak(sayDirective(seg.text), `say: ${seg.label}`);
+        this.speak(sayDirective(seg.text), `say: ${seg.label}`, {
+          // A new part is where a real examiner turns to the candidate by name.
+          moment: seg.part > 0 && /introduction|transition|next situation/i.test(seg.label) ? "part_start" : "other",
+        });
         break;
 
       case "ask": {
         this.emitState("asking");
         const prev = this.segments[this.index - 1];
         const acknowledge = Boolean(prev && EXPECTS_ANSWER.has(prev.kind));
-        this.speak(askDirective(seg.text, acknowledge), `ask: ${seg.label}`);
+        this.speak(askDirective(seg.text, acknowledge), `ask: ${seg.label}`, { moment: "question" });
         break;
       }
 
       case "converse":
         this.emitState("asking");
-        this.speak(converseDirective(seg.text, seg.seconds), `converse: ${seg.label}`);
+        this.speak(converseDirective(seg.text, seg.seconds), `converse: ${seg.label}`, { moment: "roleplay" });
         break;
 
       case "prepare":
@@ -690,6 +744,7 @@ export class ExaminerSession {
         this.speak(
           generatedDirective(seg.context, seg.generatedIndex, seg.generatedTotal, seg.part),
           `generated q${seg.generatedIndex}/${seg.generatedTotal}: ${seg.label}`,
+          { moment: "question" },
         );
         break;
 
@@ -851,7 +906,9 @@ export class ExaminerSession {
     this.emitState(this.nudges >= CONFIG.MAX_NUDGES ? "no_response" : "nudging");
 
     const questionText = seg.kind === "ask" ? seg.text : "";
-    this.speak(nudgeDirective(this.nudges, questionText), `nudge ${this.nudges}/${CONFIG.MAX_NUDGES}`);
+    this.speak(nudgeDirective(this.nudges, questionText), `nudge ${this.nudges}/${CONFIG.MAX_NUDGES}`, {
+      moment: "check",
+    });
 
     // Fallback in case that response never completes and re-arms the ladder.
     this.setTimer("silence", CONFIG.NUDGE_MS * 2 + 15_000, () => this.onSilence());
@@ -883,7 +940,9 @@ export class ExaminerSession {
       const elapsed = this.windowStartedAt ? Date.now() - this.windowStartedAt : 0;
       const left = Math.max(0, Math.round((seg.seconds * 1000 - elapsed) / 1000));
       if (left > 4) {
-        this.speak(converseContinueDirective(seg.text, left), `role play reply (${left}s left)`);
+        this.speak(converseContinueDirective(seg.text, left), `role play reply (${left}s left)`, {
+          moment: "roleplay",
+        });
       }
       return;
     }
@@ -989,7 +1048,7 @@ export class ExaminerSession {
     this.emitState("closing");
 
     const ending = this.segments[this.segments.length - 1]?.text ?? "Thank you. This is the end of the test.";
-    this.speak(closingDirective(reason, ending), `closing (${reason})`, { urgent: true });
+    this.speak(closingDirective(reason, ending), `closing (${reason})`, { urgent: true, moment: "closing" });
     this.setTimer("closeGuard", 25_000, () => void this.end(reason));
   }
 
@@ -1053,6 +1112,7 @@ export class ExaminerSession {
         this.examinerBuf = "";
         if (text) {
           this.record?.addTurn("examiner", text, { segmentIndex: this.index });
+          this.noteExaminerTurn(text);
           this.send({ t: "transcript", role: "examiner", text, segmentIndex: this.index });
         }
         break;

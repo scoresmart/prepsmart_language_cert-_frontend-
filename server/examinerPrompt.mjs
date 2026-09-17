@@ -116,8 +116,39 @@ export function memoryBlock(profile, lastAnswer) {
     : "";
 
   return `[Your memory of this candidate — never read any of this out loud]
-${[heard, recent].filter(Boolean).join("\n\n")}
-${entries.some(([k]) => k === "name") ? "Address them by name when it sounds natural." : ""}`.trim();
+${[heard, recent].filter(Boolean).join("\n\n")}`.trim();
+}
+
+/** The name a person would actually be called by: "Ravi", not "Ravi Kumar Sharma". */
+export function firstName(name) {
+  return String(name ?? "").trim().split(/\s+/)[0] ?? "";
+}
+
+/**
+ * Whether the examiner says the candidate's name on this turn.
+ *
+ * Left to the model, "use it when natural" means it is almost never used — every
+ * scripted line says "keep the meaning exactly" and the model reads that as
+ * "add nothing". So the bridge decides, the way a real examiner does it: right
+ * after hearing the name, at the start of each part, when checking they are
+ * still there, and at goodbye — and not twice in a row.
+ *
+ * @param {string} name   full name as heard
+ * @param {"first"|"must"|"avoid"|"optional"} mode
+ */
+export function nameCue(name, mode) {
+  const first = firstName(name);
+  if (!first) return "";
+  switch (mode) {
+    case "first":
+      return `[Their name] You have just heard the candidate say their name: ${name}. In THIS turn, acknowledge it warmly using their first name — for example "Thank you, ${first}." or "Nice to meet you, ${first}." — before anything else you were asked to say. Adding their name does not change the meaning of any scripted line.`;
+    case "must":
+      return `[Their name] Address the candidate by their first name, ${first}, once in this turn — naturally, the way a person would ("Right, ${first}, …" or "Thank you, ${first}."). Adding their name does not change the meaning of any scripted line. Say it only once.`;
+    case "avoid":
+      return `[Their name] Their name is ${first}. You used it very recently, so do not say it again in this turn — repeating a name every sentence sounds unnatural.`;
+    default:
+      return `[Their name] Their name is ${first}. You may use it once in this turn if it fits naturally, but you do not have to.`;
+  }
 }
 
 /**
@@ -215,7 +246,7 @@ export function nudgeDirective(level, questionText) {
   const repeat = questionText ? ` Then repeat the question once: "${questionText}"` : "";
   if (level === 1) {
     return `IMPORTANT: The candidate has said NOTHING. Complete silence — no answer was given, and you must not pretend one was. Gently ask them to answer, for example "Please answer when you're ready — take your time, there's no rush."${repeat}
-Do not thank them, do not acknowledge any answer, do not move on. You may use their name if you know it. Keep it under 10 seconds, then stop and wait.`;
+Do not thank them, do not acknowledge any answer, do not move on. Keep it under 10 seconds, then stop and wait.`;
   }
   if (level === 2) {
     return `IMPORTANT: Still complete silence — the candidate has said nothing at all. Ask once more whether they can hear you, for example "I still can't hear you. Can you hear me? Please answer when you're ready."${repeat}
