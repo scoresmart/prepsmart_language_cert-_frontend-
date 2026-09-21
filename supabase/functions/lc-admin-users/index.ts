@@ -1,6 +1,7 @@
 // Admin user management for the PrepSmart LC admin panel.
 // Deployed to Supabase project sepzceaicoldqhyxxzff as `lc-admin-users` (verify_jwt = true).
-// All actions require the caller to be an admin (profiles.role = 'admin' or an LC admin email).
+// `change_own_password` is open to any signed-in user for their own account; every other action
+// requires the caller to be an admin (profiles.role = 'admin' or an LC admin email).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
@@ -42,11 +43,6 @@ Deno.serve(async (req) => {
   const caller = authData?.user;
   if (authError || !caller) return fail("Unauthorized", 401);
 
-  const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", caller.id).maybeSingle();
-  const callerIsAdmin =
-    callerProfile?.role === "admin" || ADMIN_EMAILS.includes((caller.email ?? "").toLowerCase());
-  if (!callerIsAdmin) return fail("Admin access required", 403);
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -54,6 +50,56 @@ Deno.serve(async (req) => {
     return fail("Invalid JSON body");
   }
   const action = String(body.action ?? "");
+
+  /** Latest change per user; the admin Users page shows it. Failure here must not undo a successful password change. */
+  async function recordPasswordChange(userId: string, changedBy: "user" | "admin") {
+    const { error } = await admin.from("lc_password_changes").upsert(
+      {
+        user_id: userId,
+        changed_at: new Date().toISOString(),
+        changed_by: changedBy,
+        changed_by_admin_id: changedBy === "admin" ? caller!.id : null,
+      },
+      { onConflict: "user_id" },
+    );
+    if (error) console.error("lc_password_changes upsert failed", error);
+  }
+
+  // --- Self-service (any signed-in user, own account only) -------------------
+  if (action === "change_own_password") {
+    const currentPassword = String(body.currentPassword ?? "");
+    const newPassword = String(body.newPassword ?? "");
+    if (newPassword.length < MIN_PASSWORD) return fail(`New password must be at least ${MIN_PASSWORD} characters`);
+
+    // Google-only accounts have no password to confirm; they're already authenticated by their session.
+    const providers = (caller.app_metadata?.providers as string[] | undefined) ?? [caller.app_metadata?.provider];
+    const hasPassword = providers.includes("email");
+    if (hasPassword) {
+      if (!currentPassword) return fail("Enter your current password");
+      if (currentPassword === newPassword) return fail("New password must be different from your current password");
+      const verifier = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { error: verifyError } = await verifier.auth.signInWithPassword({
+        email: caller.email ?? "",
+        password: currentPassword,
+      });
+      if (verifyError) {
+        return fail(/rate|too many/i.test(verifyError.message) ? "Too many attempts. Please wait a minute and try again." : "Current password is incorrect");
+      }
+    }
+
+    const { error } = await admin.auth.admin.updateUserById(caller.id, { password: newPassword });
+    if (error) return fail(error.message);
+    await recordPasswordChange(caller.id, "user");
+    return json({ success: true });
+  }
+
+  // --- Everything below is admin-only ---------------------------------------
+  const { data: callerProfile } = await admin.from("profiles").select("role").eq("id", caller.id).maybeSingle();
+  const callerIsAdmin =
+    callerProfile?.role === "admin" || ADMIN_EMAILS.includes((caller.email ?? "").toLowerCase());
+  if (!callerIsAdmin) return fail("Admin access required", 403);
 
   try {
     switch (action) {
@@ -69,7 +115,7 @@ Deno.serve(async (req) => {
             : "lc:student_access(subject,status,course_expiry_at,practice_portal_only)";
         let q = admin
           .from("profiles")
-          .select(`id,name,email,phone,role,approval_status,created_at,${lcEmbed},courses:student_access(subject)`, {
+          .select(`id,name,email,phone,role,approval_status,created_at,${lcEmbed},courses:student_access(subject),pw:lc_password_changes(changed_at,changed_by)`, {
             count: "exact",
           })
           .eq("lc.subject", LC_SUBJECT)
@@ -92,6 +138,7 @@ Deno.serve(async (req) => {
             created_at: p.created_at,
             courses: ((p.courses as Array<{ subject: string }> | null) ?? []).map((c) => c.subject),
             lc_access: lc ? { status: lc.status, course_expiry_at: lc.course_expiry_at } : null,
+            password_changed: (Array.isArray(p.pw) ? p.pw[0] : p.pw) ?? null,
           };
         });
         return json({ success: true, users, total: count ?? users.length, page, pageSize: PAGE_SIZE });
@@ -127,6 +174,7 @@ Deno.serve(async (req) => {
           .from("profiles")
           .upsert({ id: userId, email, name, phone, role: "student", approval_status: "approved" }, { onConflict: "id" });
         if (profileError) console.error("profile upsert failed", profileError);
+        await recordPasswordChange(userId, "admin");
 
         if (grantAccess) {
           const { error: accessError } = await admin.from("student_access").upsert(
@@ -153,6 +201,7 @@ Deno.serve(async (req) => {
         if (password.length < MIN_PASSWORD) return fail(`Password must be at least ${MIN_PASSWORD} characters`);
         const { error } = await admin.auth.admin.updateUserById(userId, { password });
         if (error) return fail(error.message);
+        await recordPasswordChange(userId, "admin");
         return json({ success: true });
       }
 

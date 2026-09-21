@@ -39,6 +39,15 @@ function formatDate(iso: string | null | undefined) {
   }
 }
 
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "d MMM yyyy, h:mm a");
+  } catch {
+    return "—";
+  }
+}
+
 function isProtectedAdmin(u: AdminUserRow) {
   return u.role === "admin" || isAdminEmail(u.email);
 }
@@ -100,6 +109,9 @@ export function AdminUsersPage() {
     queryKey: listKey,
     queryFn: () => adminUsersApi.list({ scope, search, page }),
     placeholderData: keepPreviousData,
+    // Picks up password changes users make from their own Settings page.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["lc", "admin", "users"] });
@@ -126,9 +138,10 @@ export function AdminUsersPage() {
   const passwordMutation = useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) => adminUsersApi.setPassword(id, password),
     onSuccess: () => {
-      toast.success(`Password updated for ${pwTarget?.email ?? "user"}`);
+      toast.success(`Password updated for ${pwTarget?.email ?? "user"}. They've been signed out on all devices.`);
       setPwTarget(null);
       setPw({ next: "", confirm: "" });
+      invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -245,6 +258,7 @@ export function AdminUsersPage() {
                     <th className="px-4 py-3 font-medium text-slate-500">Role</th>
                     <th className="px-4 py-3 font-medium text-slate-500">Courses</th>
                     <th className="px-4 py-3 font-medium text-slate-500">LC access</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Password</th>
                     <th className="px-4 py-3 font-medium text-slate-500">Joined</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-500">Actions</th>
                   </tr>
@@ -304,6 +318,23 @@ export function AdminUsersPage() {
                                     : "None"}
                               </span>
                             </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {u.password_changed ? (
+                            <div>
+                              <Badge
+                                variant={u.password_changed.changed_by === "user" ? "default" : "secondary"}
+                                className="font-normal"
+                              >
+                                {u.password_changed.changed_by === "user" ? "Changed by user" : "Set by admin"}
+                              </Badge>
+                              <div className="mt-1 text-xs tabular-nums text-slate-400">
+                                {formatDateTime(u.password_changed.changed_at)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 tabular-nums text-slate-500">{formatDate(u.created_at)}</td>

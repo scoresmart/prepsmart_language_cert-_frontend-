@@ -1,7 +1,7 @@
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 
-/** Server-side user management lives in the `lc-admin-users` edge function (service role never reaches the browser). */
+/** Server-side user management (and self-service password changes) lives in the `lc-admin-users` edge function (service role never reaches the browser). */
 const FUNCTION_NAME = "lc-admin-users";
 
 export type AdminUserScope = "lc" | "all";
@@ -16,6 +16,8 @@ export type AdminUserRow = {
   created_at: string;
   courses: string[];
   lc_access: { status: "active" | "paused" | "expired"; course_expiry_at: string | null } | null;
+  /** Latest password change; null for accounts that predate tracking. */
+  password_changed: { changed_at: string; changed_by: "user" | "admin" } | null;
 };
 
 export type AdminUserList = { users: AdminUserRow[]; total: number; page: number; pageSize: number };
@@ -51,3 +53,7 @@ export const adminUsersApi = {
   setAccess: (userId: string, enabled: boolean) => call<void>({ action: "set_access", userId, enabled }),
   remove: (userId: string) => call<void>({ action: "delete", userId }),
 };
+
+/** Self-service for any signed-in user. Changing a password signs the account out on every device. */
+export const changeOwnPassword = (currentPassword: string, newPassword: string) =>
+  call<void>({ action: "change_own_password", currentPassword, newPassword });
