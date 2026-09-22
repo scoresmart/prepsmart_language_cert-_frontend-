@@ -42,6 +42,8 @@ export type RealtimeExamState = {
   micSilent: boolean;
   /** What the examiner remembers about the candidate: name, home town, … */
   profile: Record<string, string>;
+  /** The detail the candidate most recently corrected, e.g. a misheard name. */
+  lastCorrection: { key: string; value: string } | null;
   transcript: RealtimeTranscriptTurn[];
   summary: RealtimeExamSummary | null;
   endReason: string | null;
@@ -72,6 +74,7 @@ const initialState: RealtimeExamState = {
   micOpen: false,
   micSilent: false,
   profile: {},
+  lastCorrection: null,
   transcript: [],
   summary: null,
   endReason: null,
@@ -188,8 +191,9 @@ export function useRealtimeExam(draftKey: string, callbacks: RealtimeExamCallbac
           patch({ nudgeLevel: level, nudgeMax: max, clarifyReason: null, micSilent: Boolean(micSilent) }),
         onClarify: (reason) => patch({ clarifyReason: reason }),
         onMicOpen: (open) => patch({ micOpen: open }),
-        onProfile: (profile) => {
-          patch({ profile });
+        onProfile: (profile, corrected) => {
+          const key = corrected?.[0];
+          patch(key ? { profile, lastCorrection: { key, value: profile[key] ?? "" } } : { profile });
           callbacksRef.current.onProfile?.(profile);
         },
         onPartRecording: (part, blob) => callbacksRef.current.onPartRecording?.(part, blob),

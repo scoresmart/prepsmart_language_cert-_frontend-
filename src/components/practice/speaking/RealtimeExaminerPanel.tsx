@@ -245,6 +245,14 @@ export function RealtimeExaminerPanel({
           </div>
         )}
 
+        {state.lastCorrection?.value && state.phase !== "ended" && (
+          <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+            {state.lastCorrection.key === "name"
+              ? `Thanks — the examiner will call you ${state.lastCorrection.value} from now on, in this and every later question.`
+              : `Thanks — updated to ${state.lastCorrection.value}. The examiner will remember this for later questions.`}
+          </p>
+        )}
+
         {state.clarifyReason && state.nudgeLevel === 0 && state.phase !== "ended" && (
           <p className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-800">
             {state.clarifyReason === "unclear"

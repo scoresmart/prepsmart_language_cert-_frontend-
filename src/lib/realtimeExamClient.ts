@@ -127,7 +127,7 @@ export type RealtimeExamHandlers = {
   /** False while the microphone is deliberately shut (examiner speaking). */
   onMicOpen?: (open: boolean) => void;
   /** What the examiner now knows about the candidate: name, home town, … */
-  onProfile?: (profile: Record<string, string>) => void;
+  onProfile?: (profile: Record<string, string>, corrected?: string[]) => void;
   onMicLevel?: (level: number) => void;
   /** One part of the conversation (examiner + candidate) has been recorded. */
   onPartRecording?: (part: number, blob: Blob) => void;
@@ -648,7 +648,10 @@ export class RealtimeExamClient {
         break;
 
       case "profile":
-        this.handlers.onProfile?.((msg.profile ?? {}) as Record<string, string>);
+        this.handlers.onProfile?.(
+          (msg.profile ?? {}) as Record<string, string>,
+          Array.isArray(msg.corrected) ? (msg.corrected as string[]) : undefined,
+        );
         break;
 
       case "clarify":

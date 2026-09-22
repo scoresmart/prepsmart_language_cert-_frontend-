@@ -80,7 +80,13 @@ export async function loadCandidateProfile(): Promise<CandidateProfile> {
   );
 }
 
-/** Merge newly learned details into the stored profile. */
+/**
+ * Merge the examiner's current view of the candidate into the stored profile.
+ *
+ * The examiner starts every test from the stored profile and only changes a
+ * name or home town when the candidate explicitly corrects it, so its values
+ * win — that is how a misheard name gets fixed for every later question.
+ */
 export async function saveCandidateProfile(next: CandidateProfile): Promise<void> {
   const userId = await currentUserId();
   if (!userId) return;
@@ -90,13 +96,7 @@ export async function saveCandidateProfile(next: CandidateProfile): Promise<void
   if (!Object.keys(clean).length) return;
 
   const existing = await loadCandidateProfile();
-  // Identity details stay as first given; anything else takes the latest value.
-  const sticky = new Set(["name", "city", "country"]);
-  const merged: CandidateProfile = { ...existing };
-  for (const [key, value] of Object.entries(clean)) {
-    if (sticky.has(key) && merged[key]) continue;
-    merged[key] = value;
-  }
+  const merged: CandidateProfile = { ...existing, ...clean };
 
   const { error } = await supabase
     .from(PROFILES)
