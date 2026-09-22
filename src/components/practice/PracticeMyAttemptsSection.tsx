@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { History, User } from "lucide-react";
 import { PracticeScoringDialog } from "@/components/practice/PracticeScoringDialog";
 import { SpeakingAttemptAudioPlayer } from "@/components/practice/speaking/SpeakingAttemptAudioPlayer";
+import { SpeakingLiveAttempts } from "@/components/practice/speaking/SpeakingLiveAttempts";
 import { getLocalAnswer, getLocalRecording } from "@/lib/practiceAttemptStorage";
 import { api } from "@/lib/api";
 import { useAuth } from "@/providers/AuthContext";
@@ -216,6 +217,11 @@ export function PracticeMyAttemptsContent({
   }, [attempts, currentQuestionId]);
 
   const isSpeaking = module === "speaking";
+  // Speaking questions are four-part live tests; their attempts (complete or
+  // ended early) live in their own table with recordings and transcripts.
+  const isLiveSpeaking = Boolean(
+    isSpeaking && currentQuestion && "structure" in (currentQuestion.raw as object),
+  );
   const isBasicScoreModule = module === "reading" || module === "listening";
 
   const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
@@ -278,12 +284,14 @@ export function PracticeMyAttemptsContent({
           <p className="text-sm text-slate-500 md:text-base">
             Attempts for{" "}
             <span className="font-semibold text-slate-800">
-              #{currentQuestion.index} {currentQuestion.title}
+              {isSpeaking ? `Question ${currentQuestion.index}` : `#${currentQuestion.index} ${currentQuestion.title}`}
             </span>
           </p>
         )}
 
-        {questionAttempts.length === 0 ? (
+        {isLiveSpeaking ? (
+          <SpeakingLiveAttempts setId={currentQuestionId} />
+        ) : questionAttempts.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-slate-200 bg-white py-10 text-center text-base text-slate-500 md:text-lg">
             {isSpeaking
               ? "No attempts for this question yet. Submit your recording to see it here."

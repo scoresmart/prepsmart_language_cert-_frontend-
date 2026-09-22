@@ -165,10 +165,12 @@ export async function fetchPracticeQuestions(
       sets = await fetchSpeakingSetsFromSupabase();
     }
     if (sets.length > 0) {
+      // Each set is one four-part live test, presented to students as a
+      // numbered question rather than by its admin title ("Set 7").
       return sets.map((s, i) => ({
         id: s.id,
         index: i + 1,
-        title: s.title,
+        title: `Question ${i + 1}`,
         raw: s,
       }));
     }

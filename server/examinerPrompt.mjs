@@ -43,6 +43,12 @@ This is one continuous conversation with one person. Everything the candidate te
 - Never invent a detail they did not say. If you are not sure you heard it, do not use it.
 - Pronounce their name as closely as you can to the way they said it.
 
+# A candidate you have met before
+If the system tells you what you already know about the candidate from an earlier test, you HAVE met them before. Greet them back by name, and never ask for their name, where they are from, or anything else you already know — ask about something new instead, or build on what you know ("Last time you said you live in Lahore — how are things there?").
+
+# A real conversation, not a questionnaire
+Real examiners react to what they hear. When the system allows a follow-up, ask one short, natural question that grows out of what the candidate actually just said — never a generic one, and never one you have already asked. Link questions to things they told you earlier when it fits. Vary how you phrase things so no two tests sound the same.
+
 # Listening
 - The candidate is being tested. Let them finish. Never talk over them, never finish their sentence, never jump in during a pause while they are thinking.
 - A pause is not the end of an answer. Wait.
@@ -62,7 +68,7 @@ This is one continuous conversation with one person. Everything the candidate te
 You have exactly one voice: the examiner's. You must NEVER produce the candidate's side of the conversation.
 - Never invent, imagine, guess, paraphrase or voice what the candidate said or might say.
 - Never say a sentence only the candidate could say ("My name is…", "I'm from…", "In my free time I…").
-- Never thank the candidate by name or refer to anything about them unless they actually said it out loud in this call.
+- Never thank the candidate by name or refer to anything about them unless they actually said it out loud — in this call, or in an earlier test the system has told you about.
 - If you did not actually hear the candidate speak, the candidate has NOT answered. Silence is silence — do not fill it with an imagined reply.
 - If you are unsure whether they answered, assume they did not, and wait.
 
@@ -88,7 +94,8 @@ const DETAIL_LABEL = {
   name: "Their name",
   city: "Where they live",
   country: "Their country",
-  job: "Their job",
+  job: "Their job or studies",
+  home: "Their home",
   study: "What they study",
   family: "Their family",
   interest: "Something they enjoy",
@@ -109,7 +116,7 @@ export function memoryBlock(profile, lastAnswer) {
 
   const lines = entries.map(([key, value]) => `- ${DETAIL_LABEL[key] ?? "Also mentioned"}: ${value}`);
   const heard = lines.length
-    ? `What the candidate has told you SO FAR IN THIS CALL (you really heard this — use it, never ask for it again):\n${lines.join("\n")}`
+    ? `What you know about the candidate — from this call and from their earlier tests (this is true — use it, never ask for it again):\n${lines.join("\n")}`
     : "";
   const recent = lastAnswer
     ? `Their most recent answer, as you heard it: "${lastAnswer}"`
@@ -140,6 +147,8 @@ export function nameCue(name, mode) {
   const first = firstName(name);
   if (!first) return "";
   switch (mode) {
+    case "returning":
+      return `[Their name] You have met this candidate before, in an earlier practice test. Their name is ${name}. In THIS turn, welcome them back warmly using their first name — for example "Nice to see you again, ${first}." — before anything else you were asked to say. Do not ask for their name.`;
     case "first":
       return `[Their name] You have just heard the candidate say their name: ${name}. In THIS turn, acknowledge it warmly using their first name — for example "Thank you, ${first}." or "Nice to meet you, ${first}." — before anything else you were asked to say. Adding their name does not change the meaning of any scripted line.`;
     case "must":
@@ -196,8 +205,8 @@ export function askDirective(text, acknowledge) {
     : "Ask";
   return `You have already greeted the candidate and introduced this test at the start of the call. The greeting is done.
 
-${lead} this question, keeping its meaning exactly: "${text}"
-Ask only this one question, and nothing else. ${STOP}`;
+${lead} this question, keeping its meaning: "${text}"
+You may phrase it naturally in your own words, and link it to something the candidate told you earlier if that fits — but never ask for anything you already know about them. Ask only this one question, and nothing else. ${STOP}`;
 }
 
 /** Part 2 role play: read the situation, then stay in character. */
@@ -229,8 +238,28 @@ export function speakDirective(text, seconds, context) {
 They then have up to ${seconds} seconds to speak. ${STOP}${grounding}`;
 }
 
+/**
+ * One short follow-up in Part 1, drawn from what the candidate just said.
+ * This is what stops the interview sounding like a list being read out.
+ */
+export function followupDirective(lastAnswer) {
+  const heard = lastAnswer ? ` They just said: "${lastAnswer}"` : "";
+  return `The candidate has answered.${heard}
+
+Give a brief, natural acknowledgement, then ask ONE short follow-up question that grows directly out of what they actually said — the way a curious person would ("Oh, why's that?", "What do you like most about it?", "How long have you been doing that?"). It must be specific to their answer, must not repeat anything already asked, and must never ask for their name or where they are from.
+Ask only that one question. ${STOP}`;
+}
+
 /** Examiner invents a question from the picture or the topic. */
 export function generatedDirective(context, index, total, part) {
+  if (part === 1) {
+    return `Ask the candidate a personal warm-up question.
+
+Reference (never read it out):
+${context}
+
+Give a brief acknowledgement if they have just answered something, then ask it. Ask only this one question. ${STOP}`;
+  }
   const subject = part === 3 ? "the picture the candidate is looking at" : "the topic the candidate just spoke about";
   return `Ask follow-up question ${index} of ${total} about ${subject}.
 

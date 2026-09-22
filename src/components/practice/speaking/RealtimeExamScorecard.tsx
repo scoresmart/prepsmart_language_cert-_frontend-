@@ -28,6 +28,8 @@ type Props = {
   level?: string | null;
   attemptId?: string | null;
   endReason?: string | null;
+  /** Called once the marker returns a score, so it can be saved with the attempt. */
+  onScored?: (score: SpeakingScoreResult) => void;
   className?: string;
 };
 
@@ -88,8 +90,11 @@ export function RealtimeExamScorecard({
   level,
   attemptId,
   endReason,
+  onScored,
   className,
 }: Props) {
+  const onScoredRef = React.useRef(onScored);
+  onScoredRef.current = onScored;
   const [phase, setPhase] = React.useState<ScoringPhase>("idle");
   const [score, setScore] = React.useState<SpeakingScoreResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -128,6 +133,7 @@ export function RealtimeExamScorecard({
         if (!res.data) throw new Error("The marker returned no score.");
         setScore(res.data);
         setPhase("done");
+        onScoredRef.current?.(res.data);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Could not reach the scoring service.");
@@ -165,7 +171,9 @@ export function RealtimeExamScorecard({
               {setTitle ?? "LanguageCert Academic Speaking"} · live examiner ·{" "}
               {endReason === "no_response"
                 ? "ended with no answers detected"
-                : "full four-part test"}
+                : endReason && endReason !== "completed"
+                  ? "ended early — scored on the parts you answered"
+                  : "full four-part test"}
             </p>
           </div>
 

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Loader2 } from "lucide-react";
 
@@ -62,8 +62,17 @@ import type { RecordingPhase } from "@/components/practice/speaking/UserRecordin
 
 import { RealtimeExaminerPanel } from "@/components/practice/speaking/RealtimeExaminerPanel";
 import { useRealtimeExam } from "@/hooks/useRealtimeExam";
-import { buildExamSegments, examSegmentSummary } from "@/lib/speakingExamSegments";
+import { buildExamSegments, examSegmentSummary, type ExamSegment } from "@/lib/speakingExamSegments";
 import { saveRealtimeExamResult } from "@/lib/realtimeExamStorage";
+import type { RealtimeExamSummary } from "@/lib/realtimeExamClient";
+import {
+  createLiveAttempt,
+  loadCandidateProfile,
+  saveCandidateProfile,
+  updateLiveAttempt,
+  uploadPartRecording,
+  type LiveRecordingRef,
+} from "@/lib/speakingLiveStore";
 
 
 
@@ -282,47 +291,146 @@ function SpeakingRunner({
    * alongside it. It only appears for admin-authored sets, which are the ones
    * that carry a script.
    */
-  const examSegments = React.useMemo(
+  // Built without a profile for the estimate shown before the test starts; the
+  // real script is built at start time, once the candidate's saved details
+  // have been loaded, and then stays fixed for the whole test.
+  const previewSegments = React.useMemo(
     () => (speakingSet ? buildExamSegments(speakingSet.structure) : []),
     [speakingSet],
   );
-  const examInfo = React.useMemo(() => examSegmentSummary(examSegments), [examSegments]);
+  const [activeSegments, setActiveSegments] = React.useState<ExamSegment[] | null>(null);
+  const examSegments = activeSegments ?? previewSegments;
+  const examInfo = React.useMemo(() => examSegmentSummary(previewSegments), [previewSegments]);
   // A set with nothing but boilerplate has no exam to run.
   const realtimeAvailable = examInfo.spoken > 0;
   const realtimeMinutes = examInfo.estimatedMinutes;
+  const questionTitle = `Question ${questionIndex}`;
 
-  const draftKey = speakingSet ? `${speakingSet.id}:${part}` : `speaking:${part}:${questionIndex}`;
-  const realtime = useRealtimeExam(draftKey);
+  /** The database row for the test in progress, and the recordings saved to it. */
+  const liveAttemptIdRef = React.useRef<Promise<string | null> | null>(null);
+  const liveRecordingsRef = React.useRef<LiveRecordingRef[]>([]);
+  const queryClient = useQueryClient();
+  const refreshLiveAttempts = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["speaking-live-attempts"] });
+  }, [queryClient]);
+
+  const draftKey = speakingSet ? `${speakingSet.id}:live` : `speaking:${part}:${questionIndex}`;
+  const realtime = useRealtimeExam(draftKey, {
+    // Each part's audio is uploaded the moment that part is over, so a test
+    // abandoned half way still keeps everything recorded up to that point.
+    onPartRecording: (recPart, blob) => {
+      const pending = liveAttemptIdRef.current;
+      if (!pending) return;
+      void pending.then(async (id) => {
+        if (!id) return;
+        const ref = await uploadPartRecording(id, recPart, blob);
+        if (!ref) return;
+        liveRecordingsRef.current = [
+          ...liveRecordingsRef.current.filter((r) => r.part !== ref.part),
+          ref,
+        ].sort((a, b) => a.part - b.part);
+        await updateLiveAttempt(id, { recordings: liveRecordingsRef.current });
+        refreshLiveAttempts();
+      });
+    },
+    // Anything the candidate says about themselves is kept for the next test.
+    onProfile: (profile) => {
+      void saveCandidateProfile(profile);
+    },
+  });
   const realtimeState = realtime.state;
+  const segmentsRef = React.useRef(examSegments);
+  segmentsRef.current = examSegments;
 
-  const startRealtimeExam = React.useCallback(() => {
-    if (!realtimeAvailable) return;
+  const startRealtimeExam = React.useCallback(async () => {
+    if (!realtimeAvailable || !speakingSet) return;
     stopMicrophoneStream(micStreamRef.current);
     micStreamRef.current = null;
     setMicStream(null);
     setMicReady(false);
 
+    // Fetch what the examiner already knows about this candidate from their
+    // earlier questions — name, where they live, … — so it is never re-asked.
+    const known = await loadCandidateProfile();
+    const segments = buildExamSegments(speakingSet.structure, { knownProfile: known });
+    setActiveSegments(segments);
+    segmentsRef.current = segments;
+
+    liveRecordingsRef.current = [];
+    savedRealtimeRef.current = null;
+    partialSavedRef.current = false;
+    const pendingId = createLiveAttempt({
+      setId: speakingSet.id,
+      questionNumber: questionIndex,
+      title: questionTitle,
+      level: question?.level ?? null,
+    });
+    liveAttemptIdRef.current = pendingId;
+    void pendingId.then(() => refreshLiveAttempts());
+
     void realtime.start({
-      setId: speakingSet?.id ?? null,
-      setTitle: speakingSet?.title ?? null,
+      setId: speakingSet.id,
+      setTitle: questionTitle,
       level: normalizeCefrLevel(question?.level ?? ""),
       examName: "LanguageCert Academic Speaking",
       attemptId: null,
-      segments: examSegments,
+      candidateProfile: known,
+      segments,
     });
-  }, [realtimeAvailable, realtime, speakingSet, question?.level, examSegments]);
+  }, [realtimeAvailable, realtime, speakingSet, question?.level, questionIndex, questionTitle, refreshLiveAttempts]);
+
+  /**
+   * Write the transcript and outcome to the attempt row. Used when the test
+   * finishes, when it is ended early, and when the candidate leaves for
+   * another question half way through.
+   */
+  const persistLiveAttempt = React.useCallback(
+    async (opts: {
+      status: "completed" | "ended_early";
+      endReason: string | null;
+      summary: RealtimeExamSummary | null;
+      practiceAttemptId?: string | null;
+    }) => {
+      const id = await liveAttemptIdRef.current;
+      if (!id) return;
+      const s = realtime.stateRef.current;
+      const segs = segmentsRef.current;
+      const reached = new Set<number>(opts.summary?.partsReached ?? []);
+      for (const turn of s.transcript) {
+        const p = segs[turn.segmentIndex]?.part;
+        if (p) reached.add(p);
+      }
+      if (s.part > 0) reached.add(s.part);
+      await updateLiveAttempt(id, {
+        session_id: opts.summary?.sessionId ?? null,
+        status: opts.status,
+        end_reason: opts.endReason,
+        parts_reached: [...reached].sort(),
+        // Tag each turn with its part so My Attempts can group the conversation.
+        transcript: s.transcript.map((t) => ({ ...t, part: segs[t.segmentIndex]?.part ?? 0 })),
+        profile: s.profile,
+        summary: opts.summary,
+        duration_ms: opts.summary?.durationMs ?? s.elapsedMs,
+        ...(opts.practiceAttemptId ? { practice_attempt_id: opts.practiceAttemptId } : {}),
+      });
+      refreshLiveAttempts();
+    },
+    [realtime.stateRef, refreshLiveAttempts],
+  );
 
   // Persist the finished conversation the moment the examiner signs off.
   const savedRealtimeRef = React.useRef<string | null>(null);
+  const partialSavedRef = React.useRef(false);
   React.useEffect(() => {
     if (realtimeState.phase !== "ended" || !realtimeState.summary) return;
     if (savedRealtimeRef.current === realtimeState.summary.sessionId) return;
     savedRealtimeRef.current = realtimeState.summary.sessionId;
+    partialSavedRef.current = true;
 
     saveRealtimeExamResult(draftKey, {
       sessionId: realtimeState.summary.sessionId,
       setId: speakingSet?.id ?? null,
-      setTitle: speakingSet?.title ?? null,
+      setTitle: questionTitle,
       level: question?.level ?? null,
       updatedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
@@ -331,8 +439,10 @@ function SpeakingRunner({
       endReason: realtimeState.endReason,
     });
 
-    const answered = realtimeState.summary.questionsAnswered;
-    const asked = Math.max(1, realtimeState.summary.questionsAsked);
+    const summary = realtimeState.summary;
+    const endReason = realtimeState.endReason;
+    const answered = summary.questionsAnswered;
+    const asked = Math.max(1, summary.questionsAsked);
     // A provisional completion score so the attempt row exists immediately.
     // The scorecard passes this id to the marker, which overwrites the row with
     // the real score once it has read the transcript.
@@ -344,7 +454,15 @@ function SpeakingRunner({
         total: 50,
       },
       onAttemptSaved,
-    ).then(setRealtimeAttemptId);
+    ).then((practiceId) => {
+      setRealtimeAttemptId(practiceId);
+      void persistLiveAttempt({
+        status: endReason === "completed" ? "completed" : "ended_early",
+        endReason,
+        summary,
+        practiceAttemptId: practiceId,
+      });
+    });
   }, [
     realtimeState.phase,
     realtimeState.summary,
@@ -355,8 +473,38 @@ function SpeakingRunner({
     question?.level,
     part,
     questionIndex,
+    questionTitle,
     onAttemptSaved,
+    persistLiveAttempt,
   ]);
+
+  /** Save whatever exists of a test the candidate walked away from. */
+  const savePartialAndAbort = React.useCallback(
+    (reason: string) => {
+      const s = realtime.stateRef.current;
+      if (!s.running || partialSavedRef.current || !liveAttemptIdRef.current) return;
+      partialSavedRef.current = true;
+      realtime.abort();
+      void persistLiveAttempt({ status: "ended_early", endReason: reason, summary: s.summary });
+    },
+    [realtime, persistLiveAttempt],
+  );
+
+  // Leaving the page mid-test still leaves a record of the half test.
+  const savePartialRef = React.useRef(savePartialAndAbort);
+  savePartialRef.current = savePartialAndAbort;
+  React.useEffect(() => () => savePartialRef.current("left_question"), []);
+
+  /** Next: skip this question entirely and open the next one. */
+  const handleNextQuestion = React.useCallback(() => {
+    savePartialAndAbort("skipped_question");
+    onNext?.();
+  }, [savePartialAndAbort, onNext]);
+
+  const handlePreviousQuestion = React.useCallback(() => {
+    savePartialAndAbort("left_question");
+    onPrevious?.();
+  }, [savePartialAndAbort, onPrevious]);
 
 
 
@@ -868,13 +1016,17 @@ function SpeakingRunner({
   const liveExamActive = realtimeAvailable;
 
   const footer = liveExamActive ? (
-    <PracticeNavButton
-      onClick={() => (realtimeState.phase === "ended" ? onNext?.() : undefined)}
-      disabled={realtimeState.phase !== "ended"}
-      className="gap-2"
-    >
-      {realtimeState.phase === "ended" ? "Continue" : "Finish the test to continue"}
-    </PracticeNavButton>
+    realtimeState.phase === "ended" && questionIndex < totalSets ? (
+      <PracticeNavButton onClick={handleNextQuestion} className="gap-2">
+        Continue to Question {questionIndex + 1}
+      </PracticeNavButton>
+    ) : (
+      <p className="text-xs font-medium text-slate-500">
+        {realtimeState.running
+          ? "Next skips this question — your answers so far are saved to My Attempts."
+          : `Question ${questionIndex} · Part 1 Questions → Part 2 Role play → Part 3 Picture → Part 4 Presentation`}
+      </p>
+    )
   ) : !requiresRecording ? (
     <PracticeNavButton
       onClick={finishPartOrAdvance}
@@ -944,15 +1096,17 @@ function SpeakingRunner({
 
       totalSets={totalSets}
 
-      setProgress={setProgress}
+      setProgress={liveExamActive ? undefined : setProgress}
 
-      setTitle={speakingSet?.title}
+      setTitle={liveExamActive ? questionTitle : speakingSet?.title}
 
       promptLabel={setQuestion?.prompt?.promptLabel}
 
-      onPrevious={onPrevious}
+      liveTest={liveExamActive}
 
-      onNext={onNext}
+      onPrevious={liveExamActive ? handlePreviousQuestion : onPrevious}
+
+      onNext={liveExamActive ? handleNextQuestion : onNext}
 
       footer={footer}
 
@@ -963,16 +1117,26 @@ function SpeakingRunner({
       {liveExamActive ? (
         <RealtimeExaminerPanel
           state={realtimeState}
-          setTitle={speakingSet?.title}
+          setTitle={questionTitle}
           level={question.level}
           estimatedMinutes={realtimeMinutes}
           segments={examSegments}
           attemptId={realtimeAttemptId}
           fallbackImageUrl={question.image_url}
-          onStart={startRealtimeExam}
+          onStart={() => void startRealtimeExam()}
           onStop={realtime.stop}
+          onSkipPart={realtime.skipPart}
+          onScored={(score) => {
+            void liveAttemptIdRef.current?.then((id) => {
+              if (!id) return;
+              void updateLiveAttempt(id, { score }).then(() => refreshLiveAttempts());
+            });
+          }}
           onRetry={() => {
             savedRealtimeRef.current = null;
+            partialSavedRef.current = false;
+            liveAttemptIdRef.current = null;
+            setActiveSegments(null);
             setRealtimeAttemptId(null);
             realtime.reset();
           }}

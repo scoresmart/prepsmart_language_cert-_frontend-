@@ -64,6 +64,11 @@ export type SpeakingExamPart3 = {
   describe_seconds: number;
   question_count: number;
   question_seconds: number;
+  /**
+   * Scripted follow-up questions, one per slot. A blank slot makes the
+   * examiner invent that question from the picture instead.
+   */
+  questions: string[];
   closing: string;
 };
 
@@ -74,6 +79,8 @@ export type SpeakingExamPart4 = {
   present_seconds: number;
   followup_count: number;
   followup_seconds: number;
+  /** Scripted follow-ups, one per slot; a blank slot is invented from the topic. */
+  followups: string[];
 };
 
 export type SpeakingExamStructure = {
@@ -163,6 +170,7 @@ export function emptySpeakingExamStructure(): SpeakingExamStructure {
       describe_seconds: EXAM_TIMING.part3Describe,
       question_count: PART3_QUESTION_COUNT,
       question_seconds: EXAM_TIMING.part3Question,
+      questions: Array.from({ length: PART3_QUESTION_COUNT }, () => ""),
       closing: EXAM_DEFAULTS.part3Closing,
     },
     part4: {
@@ -172,6 +180,7 @@ export function emptySpeakingExamStructure(): SpeakingExamStructure {
       present_seconds: EXAM_TIMING.part4Present,
       followup_count: PART4_FOLLOWUP_COUNT,
       followup_seconds: EXAM_TIMING.part4Followup,
+      followups: Array.from({ length: PART4_FOLLOWUP_COUNT }, () => ""),
     },
     ending: EXAM_DEFAULTS.ending,
   };
@@ -265,6 +274,8 @@ export function normalizeSpeakingExamStructure(raw: unknown): SpeakingExamStruct
   const p4 = (s.part4 ?? {}) as Partial<SpeakingExamPart4>;
 
   const rawSituations = Array.isArray(p2.situations) ? p2.situations : [];
+  const p3QuestionCount = posInt(p3.question_count, PART3_QUESTION_COUNT);
+  const p4FollowupCount = posInt(p4.followup_count, PART4_FOLLOWUP_COUNT);
 
   return {
     version: 3,
@@ -296,8 +307,9 @@ export function normalizeSpeakingExamStructure(raw: unknown): SpeakingExamStruct
       image_idea: str(p3.image_idea),
       prepare_seconds: posInt(p3.prepare_seconds, EXAM_TIMING.part3Prepare),
       describe_seconds: posInt(p3.describe_seconds, EXAM_TIMING.part3Describe),
-      question_count: posInt(p3.question_count, PART3_QUESTION_COUNT),
+      question_count: p3QuestionCount,
       question_seconds: posInt(p3.question_seconds, EXAM_TIMING.part3Question),
+      questions: fixedList(p3.questions, p3QuestionCount),
       closing: str(p3.closing, base.part3.closing),
     },
     part4: {
@@ -305,8 +317,9 @@ export function normalizeSpeakingExamStructure(raw: unknown): SpeakingExamStruct
       topic: str(p4.topic),
       prepare_seconds: posInt(p4.prepare_seconds, EXAM_TIMING.part4Prepare),
       present_seconds: posInt(p4.present_seconds, EXAM_TIMING.part4Present),
-      followup_count: posInt(p4.followup_count, PART4_FOLLOWUP_COUNT),
+      followup_count: p4FollowupCount,
       followup_seconds: posInt(p4.followup_seconds, EXAM_TIMING.part4Followup),
+      followups: fixedList(p4.followups, p4FollowupCount),
     },
     ending: str(s.ending, base.ending),
   };

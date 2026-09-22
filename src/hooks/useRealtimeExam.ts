@@ -86,7 +86,14 @@ const initialState: RealtimeExamState = {
  * Everything the candidate says is written to session storage as it arrives, so
  * a refresh or a crashed tab still leaves a recoverable record of the attempt.
  */
-export function useRealtimeExam(draftKey: string) {
+export type RealtimeExamCallbacks = {
+  /** A finished part's conversation audio, ready to upload. */
+  onPartRecording?: (part: number, blob: Blob) => void;
+  /** The examiner learned something new about the candidate. */
+  onProfile?: (profile: Record<string, string>) => void;
+};
+
+export function useRealtimeExam(draftKey: string, callbacks: RealtimeExamCallbacks = {}) {
   const [state, setState] = React.useState<RealtimeExamState>(initialState);
   const clientRef = React.useRef<RealtimeExamClient | null>(null);
   const prepareTimerRef = React.useRef<number | null>(null);
@@ -94,6 +101,10 @@ export function useRealtimeExam(draftKey: string) {
   const draftKeyRef = React.useRef(draftKey);
 
   draftKeyRef.current = draftKey;
+  const callbacksRef = React.useRef(callbacks);
+  callbacksRef.current = callbacks;
+  /** Latest state, for callers that must read it outside a render (unmount, navigation). */
+  const stateRef = React.useRef<RealtimeExamState>(initialState);
 
   const patch = React.useCallback((next: Partial<RealtimeExamState>) => {
     setState((prev) => ({ ...prev, ...next }));
@@ -177,7 +188,11 @@ export function useRealtimeExam(draftKey: string) {
           patch({ nudgeLevel: level, nudgeMax: max, clarifyReason: null, micSilent: Boolean(micSilent) }),
         onClarify: (reason) => patch({ clarifyReason: reason }),
         onMicOpen: (open) => patch({ micOpen: open }),
-        onProfile: (profile) => patch({ profile }),
+        onProfile: (profile) => {
+          patch({ profile });
+          callbacksRef.current.onProfile?.(profile);
+        },
+        onPartRecording: (part, blob) => callbacksRef.current.onPartRecording?.(part, blob),
 
         onSaved: (summary) => patch({ summary }),
 
@@ -224,6 +239,10 @@ export function useRealtimeExam(draftKey: string) {
     patch({ phase: "closing" });
   }, [patch]);
 
+  const skipPart = React.useCallback(() => {
+    clientRef.current?.skipPart();
+  }, []);
+
   const abort = React.useCallback(() => {
     clientRef.current?.abort();
     clientRef.current = null;
@@ -261,7 +280,9 @@ export function useRealtimeExam(draftKey: string) {
     return () => window.clearInterval(id);
   }, [state.running]);
 
+  stateRef.current = state;
+
   const recoveredDraft = React.useMemo(() => loadRealtimeExamDraft(draftKey), [draftKey]);
 
-  return { state, start, stop, abort, reset, recoveredDraft };
+  return { state, stateRef, start, stop, skipPart, abort, reset, recoveredDraft };
 }

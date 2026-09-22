@@ -7,12 +7,9 @@ export const LC_SECTIONS = [
     module: "speaking",
     color: "text-blue-400",
     icon: Mic,
-    parts: [
-      { label: "Part 1 — Questions", part: "1", to: partStartUrl("speaking", "1") },
-      { label: "Part 2 — Role Play", part: "2", to: partStartUrl("speaking", "2") },
-      { label: "Part 3 — Read Aloud", part: "3", to: partStartUrl("speaking", "3") },
-      { label: "Part 4 — Presentation", part: "4", to: partStartUrl("speaking", "4") },
-    ],
+    // One live test per question: each covers all four parts, so there is a
+    // single entry rather than one per part.
+    parts: [{ label: "Speaking Live Test", part: "1", to: partStartUrl("speaking", "1") }],
   },
   {
     label: "Writing",

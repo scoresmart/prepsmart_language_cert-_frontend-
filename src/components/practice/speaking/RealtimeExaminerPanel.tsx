@@ -1,4 +1,4 @@
-import { ImageOff, PhoneOff, Play } from "lucide-react";
+import { ImageOff, PhoneOff, Play, SkipForward } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,8 @@ import { speakingImagePublicUrl } from "@/lib/speakingExamForm";
 import type { ExamSegment } from "@/lib/speakingExamSegments";
 import { SpeakingLiveWave, type LiveSpeaker } from "@/components/practice/speaking/SpeakingLiveWave";
 import { RealtimeExamScorecard } from "@/components/practice/speaking/RealtimeExamScorecard";
+import type { RealtimeExamSummary } from "@/lib/realtimeExamClient";
+import type { SpeakingScoreResult } from "@/lib/scoringTypes";
 
 const PHASE_LABEL: Record<string, string> = {
   idle: "Mic ready",
@@ -27,7 +29,7 @@ const PARTS = [
   { n: 1, label: "Questions" },
   { n: 2, label: "Role play" },
   { n: 3, label: "Picture" },
-  { n: 4, label: "Topic" },
+  { n: 4, label: "Presentation" },
 ];
 
 function formatClock(ms: number): string {
@@ -51,6 +53,10 @@ type Props = {
   fallbackImageUrl?: string | null;
   onStart: () => void;
   onStop: () => void;
+  /** Skip the rest of the current part; on the last part this ends the test. */
+  onSkipPart?: () => void;
+  /** The marker has scored the test — the caller stores it with the attempt. */
+  onScored?: (score: SpeakingScoreResult) => void;
   onRetry: () => void;
 };
 
@@ -68,8 +74,28 @@ export function RealtimeExaminerPanel({
   fallbackImageUrl,
   onStart,
   onStop,
+  onSkipPart,
+  onScored,
   onRetry,
 }: Props) {
+  // A test cut off before the bridge sent its summary still has a transcript
+  // worth marking, so build the numbers from what arrived.
+  const summary: RealtimeExamSummary | null =
+    state.summary ??
+    (state.phase === "ended" && state.transcript.length
+      ? {
+          sessionId: "",
+          turns: state.transcript.length,
+          questionsAsked: new Set(state.transcript.map((t) => t.segmentIndex)).size,
+          questionsAnswered: new Set(
+            state.transcript.filter((t) => t.role === "candidate").map((t) => t.segmentIndex),
+          ).size,
+          questionsSkipped: 0,
+          durationMs: state.elapsedMs,
+          transcript: state.transcript.map(({ role, text }) => ({ role, text })),
+        }
+      : null);
+  const onLastPart = state.part >= 4;
   const preparing = state.prepareLeft > 0;
   const image = speakingImagePublicUrl(state.imageUrl ?? fallbackImageUrl);
   // Part 3 is "describe the picture", so the picture stays up for the whole of
@@ -251,11 +277,12 @@ export function RealtimeExaminerPanel({
         )}
 
         {/* -------------------------------------------------------- results */}
-        {state.phase === "ended" && state.summary && (
+        {state.phase === "ended" && summary && (
           <RealtimeExamScorecard
             className="mt-4"
             transcript={state.transcript}
-            summary={state.summary}
+            summary={summary}
+            onScored={onScored}
             segments={segments}
             setTitle={setTitle}
             level={level}
@@ -274,6 +301,13 @@ export function RealtimeExaminerPanel({
             >
               <Play className="size-4" />
               {state.connecting ? "Connecting…" : "Start speaking test"}
+            </Button>
+          )}
+
+          {state.running && onSkipPart && !onLastPart && state.phase !== "closing" && (
+            <Button onClick={onSkipPart} variant="outline" className="gap-2">
+              <SkipForward className="size-4" />
+              Skip to Part {Math.max(1, state.part) + 1}
             </Button>
           )}
 

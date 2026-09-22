@@ -143,7 +143,7 @@ export function QuestionNavigatorPanel({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className={cn("text-sm font-medium truncate", active ? "text-cyan-900" : "text-slate-800")}>
-                        #{q.index} {q.title}
+                        {/^Question \d+$/.test(q.title) ? q.title : `#${q.index} ${q.title}`}
                       </p>
                     </div>
                     <span

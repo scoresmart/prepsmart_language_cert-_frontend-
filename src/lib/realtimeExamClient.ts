@@ -78,6 +78,12 @@ export type RealtimeExamConfig = {
   level?: string | null;
   examName?: string;
   candidateName?: string | null;
+  /**
+   * What earlier tests already taught the examiner about this candidate, loaded
+   * from the database. The bridge seeds its memory with it so name, home town
+   * and the rest are never asked for again.
+   */
+  candidateProfile?: Record<string, string>;
   attemptId?: string | null;
   userId?: string | null;
   segments: RealtimeExamSegment[];
@@ -123,6 +129,8 @@ export type RealtimeExamHandlers = {
   /** What the examiner now knows about the candidate: name, home town, … */
   onProfile?: (profile: Record<string, string>) => void;
   onMicLevel?: (level: number) => void;
+  /** One part of the conversation (examiner + candidate) has been recorded. */
+  onPartRecording?: (part: number, blob: Blob) => void;
   onSaved?: (summary: RealtimeExamSummary) => void;
   onDone?: (reason: string, summary: RealtimeExamSummary | null) => void;
   onError?: (message: string) => void;
@@ -272,6 +280,11 @@ export class RealtimeExamClient {
   private micReopenTimer: number | null = null;
   private playbackWatchdog: number | null = null;
 
+  /** Examiner and candidate mixed together, recorded one part at a time. */
+  private recordDest: MediaStreamAudioDestinationNode | null = null;
+  private recorder: MediaRecorder | null = null;
+  private recorderPart = 0;
+
   sessionId: string | null = null;
 
   constructor(handlers: RealtimeExamHandlers = {}) {
@@ -319,6 +332,18 @@ export class RealtimeExamClient {
       channelCount: 1,
     });
     this.source.connect(this.node);
+
+    // A copy of the whole conversation for the candidate's records: the raw
+    // mic plus whatever the examiner says, split into one file per part.
+    try {
+      this.recordDest = this.ctx.createMediaStreamDestination();
+      this.source.connect(this.recordDest);
+      this.playback.gain.connect(this.recordDest);
+      this.startPartRecording(1);
+    } catch (err) {
+      console.warn("[realtime] conversation recording unavailable:", err);
+      this.recordDest = null;
+    }
 
     // The candidate's turn has not started yet: nothing is captured until the
     // bridge opens the gate, so the greeting can never be talked over by a door
@@ -399,6 +424,46 @@ export class RealtimeExamClient {
     this.node?.port.postMessage({ type: "mute", value: muted });
     if (muted) this.handlers.onMicLevel?.(0);
     this.handlers.onMicOpen?.(!muted);
+  }
+
+  private startPartRecording(part: number) {
+    if (!this.recordDest || typeof MediaRecorder === "undefined") return;
+    if (this.recorder && this.recorderPart === part) return;
+    this.finishPartRecording();
+
+    const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find(
+      (m) => MediaRecorder.isTypeSupported?.(m),
+    );
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(this.recordDest.stream, mime ? { mimeType: mime } : undefined);
+    } catch {
+      return;
+    }
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: recorder.mimeType || mime || "audio/webm" });
+      if (blob.size > 0) this.handlers.onPartRecording?.(part, blob);
+    };
+    // Timesliced so a part cut short still leaves its audio in `chunks`.
+    recorder.start(1000);
+    this.recorder = recorder;
+    this.recorderPart = part;
+  }
+
+  private finishPartRecording() {
+    const rec = this.recorder;
+    this.recorder = null;
+    if (rec && rec.state !== "inactive") {
+      try {
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
   }
 
   private openSocket(config: RealtimeExamConfig, url: string): Promise<void> {
@@ -526,7 +591,11 @@ export class RealtimeExamClient {
         });
         break;
 
-      case "segment":
+      case "segment": {
+        // Part 0 is the introduction or the goodbye — it belongs to the part
+        // either side of it, so only a real part number starts a new file.
+        const part = Number(msg.part ?? 0);
+        if (part > 0) this.startPartRecording(part);
         this.handlers.onSegment?.({
           index: Number(msg.index),
           total: Number(msg.total),
@@ -539,6 +608,7 @@ export class RealtimeExamClient {
           progress: Number(msg.progress ?? 0),
         });
         break;
+      }
 
       case "prepare":
         this.handlers.onPrepare?.({
@@ -623,6 +693,14 @@ export class RealtimeExamClient {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: "stop" }));
   }
 
+  /** Move straight on to the next part; on the last part this ends the test. */
+  skipPart() {
+    if (this.stopped) return;
+    this.playback?.clear();
+    this.playbackBusy = false;
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: "skip" }));
+  }
+
   /** Drop everything now — used when the candidate leaves the page. */
   abort() {
     this.stopped = true;
@@ -642,6 +720,8 @@ export class RealtimeExamClient {
   }
 
   private teardownAudio() {
+    this.finishPartRecording();
+    this.recordDest = null;
     if (this.micReopenTimer !== null) {
       window.clearTimeout(this.micReopenTimer);
       this.micReopenTimer = null;

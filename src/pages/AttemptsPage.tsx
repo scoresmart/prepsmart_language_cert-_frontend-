@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { BookOpen, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { SpeakingLiveAttempts } from "@/components/practice/speaking/SpeakingLiveAttempts";
 import type { PracticeAttemptRow } from "@/components/practice/PracticeMyAttemptsSection";
 import {
   attemptPercent,
@@ -112,6 +113,18 @@ export function AttemptsPage() {
           ) : (
             <ul>{attempts.map((attempt) => <AttemptRow key={attempt.id} attempt={attempt} />)}</ul>
           )}
+        </div>
+
+        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] shadow-2xl shadow-black/40">
+          <header className="border-b border-white/10 px-5 py-5 sm:px-6">
+            <h2 className="text-xl font-bold text-white">Speaking live tests</h2>
+            <p className="mt-1 text-xs text-white/40">
+              Every live speaking test — including ones ended early — with recordings and transcripts
+            </p>
+          </header>
+          <div className="bg-slate-50 p-4 sm:p-5">
+            <SpeakingLiveAttempts limit={30} emptyText="No live speaking tests yet." />
+          </div>
         </div>
       </div>
     </div>

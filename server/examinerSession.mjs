@@ -19,6 +19,7 @@ import {
   converseDirective,
   generatedDirective,
   firstName,
+  followupDirective,
   memoryBlock,
   nameCue,
   nudgeDirective,
@@ -78,7 +79,25 @@ export const CONFIG = {
   MIN_ANSWER_WORDS: num("REALTIME_MIN_ANSWER_WORDS", 3),
   /** How many times the examiner asks for more before accepting what it got. */
   MAX_CLARIFY: num("REALTIME_MAX_CLARIFY", 2),
+  /** Unscripted Part 1 follow-ups per test, so the interview is a conversation. */
+  MAX_FOLLOWUPS: num("REALTIME_MAX_FOLLOWUPS", 2),
+  /** Chance that a good Part 1 answer earns a follow-up (while any are left). */
+  FOLLOWUP_CHANCE: Number(process.env.REALTIME_FOLLOWUP_CHANCE) || 0.55,
 };
+
+const PROFILE_KEYS = new Set(["name", "city", "country", "job", "study", "family", "interest", "home", "other"]);
+
+/** Details from earlier tests, as the browser loaded them from the database. */
+function seedProfile(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!PROFILE_KEYS.has(key)) continue;
+    const v = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (v) out[key] = v;
+  }
+  return out;
+}
 
 const TOOLS = [
   {
@@ -98,7 +117,7 @@ const TOOLS = [
       properties: {
         detail: {
           type: "string",
-          enum: ["name", "city", "country", "job", "study", "family", "interest", "other"],
+          enum: ["name", "city", "country", "job", "study", "family", "interest", "home", "other"],
           description: "Which kind of detail this is.",
         },
         value: {
@@ -279,6 +298,12 @@ export class ExaminerSession {
     this.unclears = 0;
     /** Everything the candidate has told us about themselves, for continuity. */
     this.profile = {};
+    /** The candidate was known from an earlier test — welcome back, never re-ask. */
+    this.returning = false;
+    /** Unscripted Part 1 follow-ups asked so far this test. */
+    this.followups = 0;
+    /** The current segment already had its follow-up; the next answer moves on. */
+    this.followupAsked = false;
     /** The examiner has addressed the candidate by name at least once. */
     this.nameSaid = false;
     /** Examiner turns since it last said the candidate's name. */
@@ -434,6 +459,16 @@ export class ExaminerSession {
       this.segments.map((s) => ({ text: s.text || s.label, seconds: s.seconds, kind: s.kind, part: s.part })),
     );
 
+    // What earlier tests taught us. The examiner starts this one already
+    // knowing it, so it greets them back and never asks for it again.
+    this.profile = seedProfile(exam.candidateProfile);
+    this.returning = Boolean(this.profile.name);
+    if (Object.keys(this.profile).length) {
+      this.record.setProfile?.(this.profile);
+      this.send({ t: "profile", profile: { ...this.profile } });
+      console.log(`[${this.sessionId}] returning candidate:`, this.profile);
+    }
+
     this.startedAt = Date.now();
     this.emitState("connecting");
 
@@ -572,7 +607,7 @@ export class ExaminerSession {
    */
   nameMode(moment) {
     if (!this.profile.name || moment === "roleplay") return null;
-    if (!this.nameSaid) return "first";
+    if (!this.nameSaid) return this.returning ? "returning" : "first";
     if (this.turnsSinceName < 2) return moment === "closing" ? "must" : "avoid";
     if (moment === "part_start" || moment === "check" || moment === "closing") return "must";
     if (moment === "question" && this.turnsSinceName >= 5) return "must";
@@ -585,7 +620,7 @@ export class ExaminerSession {
     const mode = this.nameMode(moment);
     // One chance at the "nice to meet you": if the transcript spells the name
     // differently, the examiner must not greet them again on every turn.
-    if (mode === "first") this.nameSaid = true;
+    if (mode === "first" || mode === "returning") this.nameSaid = true;
     // The cue goes last so it is the freshest thing the model reads.
     const cue = mode ? nameCue(this.profile.name, mode) : "";
     return [block, directive, cue].filter(Boolean).join("\n\n");
@@ -666,22 +701,8 @@ export class ExaminerSession {
       return;
     }
 
-    this.index = next;
-    this.answered = false;
-    this.heardSpeech = false;
-    this.pendingAdvance = false;
-    this.windowStarted = false;
-    this.windowStartedAt = 0;
-    this.nudges = 0;
-    this.preparing = false;
-    this.answerParts = [];
-    this.clarifies = 0;
-    this.unclears = 0;
-    this.settleDeadline = 0;
-    // A directive queued for the segment that just ended is stale now.
-    this.pendingDirective = null;
-
-    this.runSegment(reason);
+    // Any directive queued for the segment that just ended is stale now.
+    this.advanceTo(next, reason);
   }
 
   runSegment(reason) {
@@ -951,6 +972,19 @@ export class ExaminerSession {
 
     const text = this.answerParts.join(" ").trim();
     const quality = answerQuality(text, seg);
+    if (quality === "ok" && this.shouldFollowUp(seg)) {
+      // A real examiner picks up on what they hear. One short question drawn
+      // from this answer; whatever comes back joins the same answer, and the
+      // next pause moves the test on.
+      this.followups += 1;
+      this.followupAsked = true;
+      this.clearTimer("answerCap");
+      console.log(`[${this.sessionId}] follow-up ${this.followups}/${CONFIG.MAX_FOLLOWUPS} on ${seg.label}`);
+      this.emitState("asking");
+      this.speak(followupDirective(this.lastAnswer), `follow-up ${this.followups}`, { moment: "question" });
+      return;
+    }
+
     if (quality === "ok" || this.clarifies >= CONFIG.MAX_CLARIFY) {
       this.answered = true;
       this.advance(quality === "ok" ? "answered" : "answered_short");
@@ -968,6 +1002,77 @@ export class ExaminerSession {
       clarifyDirective("thin", seg.kind === "ask" ? seg.text : "", this.clarifies),
       `ask for more ${this.clarifies}/${CONFIG.MAX_CLARIFY}`,
     );
+  }
+
+  /** Whether this Part 1 answer gets an unscripted follow-up question. */
+  shouldFollowUp(seg) {
+    if (seg.part !== 1 || (seg.kind !== "ask" && seg.kind !== "generated")) return false;
+    if (this.followupAsked || this.followups >= CONFIG.MAX_FOLLOWUPS) return false;
+    // Name and home town are facts, not conversation starters.
+    if (/\byour (?:full |first )?name\b|where (?:are|do) you (?:from|live|come)/i.test(seg.text)) return false;
+    // Never at the cost of the later parts.
+    const elapsed = this.startedAt ? Date.now() - this.startedAt : 0;
+    if (elapsed > CONFIG.MAX_EXAM_MS * 0.35) return false;
+    return Math.random() < CONFIG.FOLLOWUP_CHANCE;
+  }
+
+  /**
+   * The candidate asked to skip the rest of this part. Everything left in it is
+   * marked skipped and the examiner goes straight to the next part — or closes
+   * the test when this was the last one.
+   */
+  skipPart() {
+    if (this.ended || this.closingSent || !this.segments.length) return;
+    const cur = this.current;
+    // The introduction (part 0) belongs to Part 1.
+    const part = Math.max(1, cur?.part ?? 1);
+    let next = this.segments.findIndex((s, i) => i > this.index && s.part > part);
+    // The final goodbye is part 0 — it is the closing, not a part to jump to.
+    if (next >= 0 && this.segments[next].part === 0) next = -1;
+
+    console.log(`[${this.sessionId}] candidate skipped part ${part}`);
+
+    // Stop the examiner mid-sentence; the browser has already dropped its queue.
+    if (this.responseActive) this.up({ type: "response.cancel" });
+    this.send({ t: "audio.clear" });
+    this.playbackEndsAt = 0;
+    this.candidateSpeaking = false;
+    this.pendingDirective = null;
+    this.preparing = false;
+
+    if (next < 0) {
+      this.beginClosing("candidate_stopped");
+      return;
+    }
+
+    // Close the segment in progress, then mark everything between as skipped.
+    this.clearSegmentTimers();
+    this.finalizeCurrent();
+    for (let i = this.index + 1; i < next; i++) {
+      const s = this.segments[i];
+      s._done = true;
+      this.record.markQuestion(i, { status: EXPECTS_ANSWER.has(s.kind) ? "skipped" : "delivered" });
+    }
+    this.advanceTo(next, "skipped_part");
+  }
+
+  /** Run segment `next` with fresh per-segment state. */
+  advanceTo(next, reason) {
+    this.index = next;
+    this.answered = false;
+    this.heardSpeech = false;
+    this.pendingAdvance = false;
+    this.windowStarted = false;
+    this.windowStartedAt = 0;
+    this.nudges = 0;
+    this.preparing = false;
+    this.answerParts = [];
+    this.clarifies = 0;
+    this.unclears = 0;
+    this.settleDeadline = 0;
+    this.followupAsked = false;
+    this.pendingDirective = null;
+    this.runSegment(reason);
   }
 
   /** Real speech, but nothing came back that can be assessed. */
@@ -1031,7 +1136,12 @@ export class ExaminerSession {
     if (!seg || seg._done || !this.record) return;
     seg._done = true;
     this.record.markQuestion(this.index, {
-      status: EXPECTS_ANSWER.has(seg.kind) ? (this.answered ? "answered" : "skipped") : "delivered",
+      // Words already heard count, even when the part was cut short mid-answer.
+      status: EXPECTS_ANSWER.has(seg.kind)
+        ? this.answered || this.answerParts.length
+          ? "answered"
+          : "skipped"
+        : "delivered",
       answeredAt: new Date().toISOString(),
       nudges: this.nudges,
     });

@@ -7,7 +7,9 @@ import { PracticeNavigatorTab } from "@/components/practice/PracticeNavigatorTab
 import { SpeakingPracticeProvider } from "@/components/practice/speaking/SpeakingPracticeContext";
 import { PracticeWorkspaceBar } from "@/components/practice/PracticeWorkspaceBar";
 import { QuestionNavigatorPanel } from "@/components/practice/QuestionNavigatorPanel";
+import { useQuery } from "@tanstack/react-query";
 import { usePracticeAttempts, usePracticeQuestions } from "@/hooks/usePracticeQuestions";
+import { listLiveAttempts } from "@/lib/speakingLiveStore";
 import { parseQuestionIndex, practiceQuestionFrameClass } from "@/lib/practiceNavigation";
 import { getPartLabel, getSectionLabel } from "@/lib/practiceQuestions";
 import {
@@ -38,9 +40,21 @@ export function PracticeQuestionPage() {
 
   const { questions, total, isLoading, isError, error, needsSignIn, refetch, questionType } = usePracticeQuestions(module, part);
   const attemptsQ = usePracticeAttempts(questionType);
+  // Live speaking tests are stored separately; any saved one marks the question practised.
+  const liveAttemptsQ = useQuery({
+    queryKey: ["speaking-live-attempts", "all", 200],
+    queryFn: () => listLiveAttempts({ limit: 200 }),
+    enabled: module === "speaking",
+  });
   const completedIds = React.useMemo(
-    () => new Set((attemptsQ.data ?? []).map((a) => a.question_set_id)),
-    [attemptsQ.data],
+    () =>
+      new Set([
+        ...(attemptsQ.data ?? []).map((a) => a.question_set_id),
+        ...(liveAttemptsQ.data ?? [])
+          .filter((a) => a.status !== "in_progress" && a.set_id)
+          .map((a) => a.set_id as string),
+      ]),
+    [attemptsQ.data, liveAttemptsQ.data],
   );
 
   const practicedCount = questions.filter((q) => completedIds.has(q.id)).length;
@@ -185,6 +199,7 @@ export function PracticeQuestionPage() {
           <div className={questionFrameClass}>
             {module === "speaking" && (
               <SpeakingSection
+                key={clampedIndex}
                 part={part}
                 questionIndex={clampedIndex}
                 totalSets={total}

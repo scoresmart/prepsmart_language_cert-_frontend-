@@ -17,6 +17,8 @@ type Props = {
   setProgress?: SpeakingSetProgress;
   setTitle?: string;
   promptLabel?: string;
+  /** The four-part live examiner test rather than a single-part prompt. */
+  liveTest?: boolean;
   onPrevious?: () => void;
   onNext?: () => void;
   sidebar?: ReactNode;
@@ -33,6 +35,7 @@ export function SpeakingPracticeShell({
   setProgress,
   setTitle,
   promptLabel,
+  liveTest = false,
   onPrevious,
   onNext,
   sidebar,
@@ -40,9 +43,13 @@ export function SpeakingPracticeShell({
   footer,
   footerTop,
 }: Props) {
-  const partTitle = SPEAKING_PART_TITLES[activePart] ?? `Speaking Part ${activePart}`;
-  const abbrev = SPEAKING_PART_ABBREV[activePart] ?? activePart;
-  const briefing = getSpeakingBannerDescription(activePart, level);
+  const partTitle = liveTest
+    ? "Speaking Live Test"
+    : (SPEAKING_PART_TITLES[activePart] ?? `Speaking Part ${activePart}`);
+  const abbrev = liveTest ? "LIVE" : (SPEAKING_PART_ABBREV[activePart] ?? activePart);
+  const briefing = liveTest
+    ? `Question ${setIndex} has four parts with a live examiner: Part 1 follow-up questions, Part 2 role play, Part 3 picture, Part 4 presentation.`
+    : getSpeakingBannerDescription(activePart, level);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-slate-100">

@@ -188,8 +188,9 @@ export function SpeakingExamEditor({ value, onChange, disabled }: Props) {
       </div>
 
       <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
-        You provide the content only. The examiner's own wording, the timings and the follow-up questions it
-        asks about your picture and topic are handled automatically, so every set runs the same exam.
+        You provide the content only. The examiner's own wording and the timings are handled automatically, so
+        every set runs the same exam. Follow-up questions are optional — any left blank are written by the
+        examiner from your picture and topic.
       </p>
 
       {/* --------------------------------------------------------- part 1 */}
@@ -300,11 +301,31 @@ export function SpeakingExamEditor({ value, onChange, disabled }: Props) {
             onChange={(e) => patch((d) => ({ ...d, part3: { ...d.part3, image_idea: e.target.value } }))}
           />
           <p className="mt-1 text-xs text-slate-400">
-            The examiner cannot see the picture — it uses this description to ask its{" "}
-            {s.part3.question_count} follow-up questions. Be specific about what is happening and the themes
-            it raises.
+            The examiner cannot see the picture — it uses this description for any follow-up question left
+            blank below. Be specific about what is happening and the themes it raises.
           </p>
         </div>
+
+        {s.part3.questions.map((q, i) => (
+          <div key={i}>
+            <Label htmlFor={`p3-q-${i}`}>Follow-up question {i + 1} (optional)</Label>
+            <Input
+              id={`p3-q-${i}`}
+              value={q}
+              disabled={disabled}
+              placeholder="Leave blank and the examiner writes one from the picture"
+              onChange={(e) =>
+                patch((d) => ({
+                  ...d,
+                  part3: {
+                    ...d.part3,
+                    questions: d.part3.questions.map((x, xi) => (xi === i ? e.target.value : x)),
+                  },
+                }))
+              }
+            />
+          </div>
+        ))}
       </PartCard>
 
       {/* --------------------------------------------------------- part 4 */}
@@ -327,10 +348,31 @@ export function SpeakingExamEditor({ value, onChange, disabled }: Props) {
           />
           <p className="mt-1 text-xs text-slate-400">
             The candidate talks for {s.part4.present_seconds} seconds, then the examiner asks{" "}
-            {s.part4.followup_count} follow-up questions it creates from this topic and from what the
-            candidate actually said.
+            {s.part4.followup_count} follow-up questions — the ones below, or for any left blank, one it
+            creates from this topic and from what the candidate actually said.
           </p>
         </div>
+
+        {s.part4.followups.map((q, i) => (
+          <div key={i}>
+            <Label htmlFor={`p4-f-${i}`}>Follow-up question {i + 1} (optional)</Label>
+            <Input
+              id={`p4-f-${i}`}
+              value={q}
+              disabled={disabled}
+              placeholder="Leave blank and the examiner writes one from the topic"
+              onChange={(e) =>
+                patch((d) => ({
+                  ...d,
+                  part4: {
+                    ...d.part4,
+                    followups: d.part4.followups.map((x, xi) => (xi === i ? e.target.value : x)),
+                  },
+                }))
+              }
+            />
+          </div>
+        ))}
       </PartCard>
 
       <div className={cn("rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600")}>

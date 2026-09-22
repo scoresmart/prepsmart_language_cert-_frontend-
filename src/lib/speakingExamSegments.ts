@@ -44,10 +44,99 @@ export type ExamSegment = {
   generatedTotal?: number;
 };
 
+/**
+ * Personal warm-up questions, keyed by the profile detail each one uncovers.
+ * A candidate is only asked for what the examiner does not already know, so a
+ * name or a home town given in one question is never asked for in the next.
+ */
+const PERSONAL_POOL: Array<{ detail: string; questions: string[] }> = [
+  {
+    detail: "job",
+    questions: [
+      "Do you work or are you a student at the moment?",
+      "What do you do — do you work, or are you studying?",
+    ],
+  },
+  {
+    detail: "family",
+    questions: [
+      "Who do you live with?",
+      "Can you tell me a little about your family?",
+    ],
+  },
+  {
+    detail: "interest",
+    questions: [
+      "What do you enjoy doing in your free time?",
+      "Do you have a hobby? Tell me about it.",
+    ],
+  },
+  {
+    detail: "home",
+    questions: [
+      "Can you tell me a little about your home?",
+      "What do you like about the place where you live?",
+    ],
+  },
+];
+
+const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+function shuffled<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+const NAME_QUESTION = /\b(your (full |first )?name|call you)\b/i;
+const PLACE_QUESTION = /where (are|do) you (from|live|come)|which (city|town|country)/i;
+
+export type ExamSegmentOptions = {
+  /** What earlier tests already taught the examiner (from the database). */
+  knownProfile?: Record<string, string>;
+};
+
+/**
+ * The Part 1 warm-up for this candidate.
+ *
+ * First test: name and home town, exactly as the set authors them. After that
+ * the examiner already knows both, so it opens with a personal question it has
+ * not asked yet — and when every detail is known it catches up on one of them
+ * instead, which is what a real examiner meeting a candidate again would do.
+ */
+function personalOpeners(authored: string[], known: Record<string, string>) {
+  const hasName = Boolean(known.name?.trim());
+  const hasPlace = Boolean((known.city ?? known.country)?.trim());
+
+  const kept = authored
+    .map((q) => q.trim())
+    .filter(Boolean)
+    .filter((q) => !(hasName && NAME_QUESTION.test(q)) && !(hasPlace && PLACE_QUESTION.test(q)));
+
+  const isKnown = (detail: string) =>
+    Boolean(known[detail]?.trim()) || (detail === "job" && Boolean(known.study?.trim()));
+  const unknown = shuffled(PERSONAL_POOL.filter((p) => !isKnown(p.detail)));
+  // Always two openers: the authored ones a first-time candidate has not
+  // answered yet, topped up with personal questions not asked before.
+  const wanted = Math.max(0, 2 - kept.length);
+  const fresh = unknown.slice(0, wanted).map((p) => ({ kind: "ask" as const, text: pick(p.questions) }));
+
+  const catchUps = fresh.length < wanted ? wanted - fresh.length : 0;
+  const catchUp = Array.from({ length: catchUps }, () => ({ kind: "generated" as const, text: "" }));
+
+  return [...kept.map((text) => ({ kind: "ask" as const, text })), ...fresh, ...catchUp];
+}
+
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
-export function buildExamSegments(raw: SpeakingExamStructure | unknown): ExamSegment[] {
+export function buildExamSegments(
+  raw: SpeakingExamStructure | unknown,
+  opts: ExamSegmentOptions = {},
+): ExamSegment[] {
   const s: SpeakingExamStructure = normalizeSpeakingExamStructure(raw);
   const out: ExamSegment[] = [];
   seq = 0;
@@ -64,12 +153,32 @@ export function buildExamSegments(raw: SpeakingExamStructure | unknown): ExamSeg
   });
 
   // ------------------------------------------------------------- part 1
-  s.part1.opening_questions.forEach((q, i) => {
-    if (!q.trim()) return;
+  const known = opts.knownProfile ?? {};
+  const knownLines = Object.entries(known)
+    .filter(([, v]) => v?.trim())
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("\n");
+
+  personalOpeners(s.part1.opening_questions, known).forEach((q, i) => {
+    if (q.kind === "generated") {
+      push({
+        kind: "generated",
+        part: 1,
+        text: "",
+        seconds: EXAM_TIMING.part1Opener,
+        label: `Part 1 · Opening question ${i + 1}`,
+        context: `Personal catch-up with a returning candidate. What you already know about them:
+${knownLines}
+Ask ONE short, friendly personal question that builds on one of these details (for example how things are going at work or in their studies, or something new in their town). Never ask for their name or where they are from — you already know.`,
+        generatedIndex: 1,
+        generatedTotal: 1,
+      });
+      return;
+    }
     push({
       kind: "ask",
       part: 1,
-      text: q.trim(),
+      text: q.text,
       seconds: EXAM_TIMING.part1Opener,
       label: `Part 1 · Opening question ${i + 1}`,
     });
@@ -157,6 +266,18 @@ export function buildExamSegments(raw: SpeakingExamStructure | unknown): ExamSeg
   });
 
   for (let i = 0; i < s.part3.question_count; i++) {
+    const scripted = s.part3.questions[i]?.trim();
+    if (scripted) {
+      push({
+        kind: "ask",
+        part: 3,
+        text: scripted,
+        seconds: s.part3.question_seconds,
+        label: `Part 3 · Question ${i + 1} of ${s.part3.question_count}`,
+        imageUrl: s.part3.image_url,
+      });
+      continue;
+    }
     push({
       kind: "generated",
       part: 3,
@@ -196,6 +317,18 @@ export function buildExamSegments(raw: SpeakingExamStructure | unknown): ExamSeg
   });
 
   for (let i = 0; i < s.part4.followup_count; i++) {
+    const scripted = s.part4.followups[i]?.trim();
+    if (scripted) {
+      push({
+        kind: "ask",
+        part: 4,
+        text: scripted,
+        seconds: s.part4.followup_seconds,
+        label: `Part 4 · Follow-up ${i + 1} of ${s.part4.followup_count}`,
+        context: topic,
+      });
+      continue;
+    }
     push({
       kind: "generated",
       part: 4,
