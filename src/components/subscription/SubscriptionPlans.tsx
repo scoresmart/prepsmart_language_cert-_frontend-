@@ -17,6 +17,13 @@ export function SubscriptionPlans({ compact }: Props) {
   const { user } = useAuth();
   const { data: stripeSub } = useLcStripeSubscription(user?.id);
   const [loading, setLoading] = React.useState(false);
+
+  // Pressing Back on Stripe restores this page from the back/forward cache with the spinner still on.
+  React.useEffect(() => {
+    const reset = (e: PageTransitionEvent) => e.persisted && setLoading(false);
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
   const isSubscribed = Boolean(stripeSub && LIVE_STRIPE_STATUSES.includes(stripeSub.status));
 
   const handleClick = async () => {
@@ -103,7 +110,7 @@ export function SubscriptionPlans({ compact }: Props) {
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Redirecting to Stripe…
+                  {isSubscribed ? "Opening billing…" : "Opening secure checkout…"}
                 </span>
               ) : isActive ? (
                 <>
