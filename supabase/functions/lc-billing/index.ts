@@ -96,7 +96,18 @@ Deno.serve(async (req) => {
 
     const prices = await stripe.prices.list({ lookup_keys: [LC_PRICE_LOOKUP_KEY], active: true, limit: 1 });
     const price = prices.data[0];
-    if (!price) return fail(`No active Stripe price with lookup key ${LC_PRICE_LOOKUP_KEY}`, 500);
+    if (!price) {
+      // Log which account/mode the key belongs to and the exact lookup keys Stripe has (JSON-quoted, so stray
+      // whitespace typed into the dashboard shows up) — a key from the wrong account or a mistyped lookup key
+      // otherwise looks identical from here.
+      const account = await stripe.accounts.retrieve().catch(() => null);
+      const mode = stripeKey.includes("_live_") ? "live" : "test";
+      const archived = await stripe.prices.list({ lookup_keys: [LC_PRICE_LOOKUP_KEY], limit: 1 }).catch(() => null);
+      const keyed = await stripe.prices.list({ active: true, limit: 100 }).catch(() => null);
+      const keys = (keyed?.data ?? []).filter((p) => p.lookup_key).map((p) => `${p.id}=${JSON.stringify(p.lookup_key)}`);
+      console.error("lc-billing: price lookup failed", { mode, account: account?.id, archived: archived?.data[0]?.id, keys });
+      return fail(`No active Stripe price with lookup key ${LC_PRICE_LOOKUP_KEY}`, 500);
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
