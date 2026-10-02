@@ -1,8 +1,12 @@
+import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { Crown, Sparkles, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { LC_PRO_HIGHLIGHTS } from "@/lib/subscriptionPlans";
-import { pickAccessibleSubscription } from "@/lib/subscription";
-import { useLcSubscriptions } from "@/hooks/useLcSubscription";
+import { isOpenEnded, pickAccessibleSubscription } from "@/lib/subscription";
+import { useLcStripeSubscription, useLcSubscriptions } from "@/hooks/useLcSubscription";
 import { useAuth } from "@/providers/AuthContext";
 import { SubscriptionPlans } from "@/components/subscription/SubscriptionPlans";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,8 +14,41 @@ import { cn } from "@/lib/utils";
 
 export function SubscriptionPage() {
   const { user } = useAuth();
-  const { data: subs, isLoading } = useLcSubscriptions(user?.id);
+  const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const checkout = searchParams.get("checkout");
+  // Stripe redirects back before (or just after) the webhook grants access — poll until it lands.
+  const [awaitingWebhook, setAwaitingWebhook] = React.useState(checkout === "success");
+  const { data: subs, isLoading } = useLcSubscriptions(user?.id, {
+    refetchInterval: awaitingWebhook ? 2000 : false,
+  });
+  const { data: stripeSub } = useLcStripeSubscription(user?.id);
   const active = pickAccessibleSubscription(subs);
+  const paid = active && active.plan !== "trial";
+
+  React.useEffect(() => {
+    if (!checkout) return;
+    if (checkout === "cancelled") toast.info("Checkout cancelled — you haven't been charged.");
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (!awaitingWebhook) return;
+    if (paid) {
+      setAwaitingWebhook(false);
+      qc.invalidateQueries({ queryKey: ["lc", "stripe-subscription", user?.id] });
+      toast.success("Payment confirmed — PrepSmart LC Pro is now active!");
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setAwaitingWebhook(false);
+      toast.info("Payment received — your access is still being activated.", {
+        description: "Refresh in a minute, or contact support if it doesn't appear.",
+      });
+    }, 30_000);
+    return () => window.clearTimeout(timeout);
+  }, [awaitingWebhook, paid, qc, user?.id]);
 
   return (
     <div className="relative space-y-8 p-4 md:p-6">
@@ -42,11 +79,17 @@ export function SubscriptionPage() {
               <Skeleton className="mt-2 h-6 w-48 bg-white/10" />
             ) : active ? (
               <>
-                <p className="mt-1 font-display text-xl font-bold capitalize text-white">{active.plan} plan</p>
+                <p className="mt-1 font-display text-xl font-bold text-white">
+                  {active.plan === "trial" ? "Free trial" : "LC Portal Pro"}
+                </p>
                 <p className="text-sm text-white/50">
-                  Active until {format(parseISO(active.current_period_end), "d MMM yyyy")}
+                  {isOpenEnded(active)
+                    ? "No expiry date"
+                    : `${stripeSub?.status === "active" && !stripeSub.cancel_at_period_end ? "Renews" : "Active until"} ${format(parseISO(active.current_period_end), "d MMM yyyy")}`}
                 </p>
               </>
+            ) : awaitingWebhook ? (
+              <p className="mt-1 font-display text-xl font-bold text-white">Activating your subscription…</p>
             ) : (
               <p className="mt-1 font-display text-xl font-bold text-white">Free tier</p>
             )}
@@ -67,16 +110,12 @@ export function SubscriptionPage() {
       <div className="relative">
         <div className="mb-5 flex items-center gap-2">
           <Zap className="size-5 text-amber-400" />
-          <h2 className="font-display text-xl font-bold text-white">Choose your plan</h2>
+          <h2 className="font-display text-xl font-bold text-white">{paid ? "Your plan" : "Upgrade to Pro"}</h2>
         </div>
         {isLoading ? (
-          <div className="grid gap-5 md:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-96 rounded-3xl bg-white/5" />
-            ))}
-          </div>
+          <Skeleton className="h-96 max-w-md rounded-3xl bg-white/5" />
         ) : (
-          <SubscriptionPlans activePlanId={active?.plan ?? null} />
+          <SubscriptionPlans />
         )}
       </div>
 

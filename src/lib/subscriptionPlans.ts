@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { BarChart3, Bot, Headphones, Mic, PenLine, Sparkles, Zap } from "lucide-react";
 
-export type SubscriptionPlanId = "monthly" | "quarterly" | "annual";
+export type SubscriptionPlanId = "monthly";
 
 export type SubscriptionPlan = {
   id: SubscriptionPlanId;
@@ -15,51 +15,21 @@ export type SubscriptionPlan = {
   features: string[];
 };
 
+/** Billed through Stripe price lookup key `lc_portal_monthly` (see supabase/functions/lc-billing). */
 export const LC_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: "monthly",
-    name: "Monthly Pro",
-    price: "AU$49",
-    priceNote: "Billed monthly",
+    name: "LC Portal Pro",
+    price: "AU$25",
+    priceNote: "Billed monthly · cancel anytime",
     cadence: "per month",
-    highlight: false,
+    highlight: true,
     features: [
       "Unlimited LC Speaking, Writing, Reading & Listening",
-      "Real exam-style practice tasks",
+      "Real exam-style practice tasks & mock tests",
       "AI-powered feedback on submissions",
       "Progress dashboard & weekly analytics",
-    ],
-  },
-  {
-    id: "quarterly",
-    name: "Quarterly Pro",
-    price: "AU$129",
-    priceNote: "Billed every 3 months",
-    cadence: "every 3 months",
-    badge: "Most Popular",
-    highlight: true,
-    savings: "Save 12%",
-    features: [
-      "Everything in Monthly Pro",
-      "Mock test access & sectional tests",
-      "Priority AI tutor responses",
       "Vocabulary hub & word lists",
-    ],
-  },
-  {
-    id: "annual",
-    name: "Annual Pro",
-    price: "AU$399",
-    priceNote: "Billed once per year",
-    cadence: "per year",
-    badge: "Best Value",
-    highlight: false,
-    savings: "Save 32%",
-    features: [
-      "Everything in Quarterly Pro",
-      "Full LC question bank access",
-      "Exam-day study planner",
-      "Tutor feedback credits included",
     ],
   },
 ];

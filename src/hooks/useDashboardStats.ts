@@ -3,6 +3,7 @@ import { differenceInCalendarDays, eachDayOfInterval, format, isSameDay, startOf
 import { supabase } from "@/lib/supabase/client";
 import type { LcAttempt, LcSubscription, LcUserProfile } from "@/types/lc";
 import { pickAccessibleSubscription } from "@/lib/subscription";
+import { fetchLcAccess } from "@/hooks/useLcSubscription";
 
 import { isRecoverableDbError } from "@/lib/supabase/errors";
 
@@ -28,7 +29,7 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
       const uid = userId as string;
 
       const [subsRes, attemptsRes, dialogueCountRes, rapidCountRes] = await Promise.all([
-        supabase.from("subscriptions").select("*").eq("user_id", uid),
+        fetchLcAccess(uid).catch((): LcSubscription[] => []),
         supabase
           .from("attempts")
           .select("id,question_type,score,max_score,completed_at")
@@ -46,7 +47,7 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
           .eq("is_published", true),
       ]);
 
-      const errors = [subsRes.error, attemptsRes.error, dialogueCountRes.error, rapidCountRes.error].filter(Boolean);
+      const errors = [attemptsRes.error, dialogueCountRes.error, rapidCountRes.error].filter(Boolean);
       const fatal = errors.find((e) => !isRecoverableDbError(e));
       if (fatal) throw fatal;
 
@@ -57,7 +58,7 @@ export function useDashboardStats(userId: string | undefined, profile: LcUserPro
         );
       }
 
-      const subscriptions = (subsRes.error ? [] : (subsRes.data ?? [])) as LcSubscription[];
+      const subscriptions = subsRes;
       const attempts = (attemptsRes.error ? [] : (attemptsRes.data ?? [])) as Pick<
         LcAttempt,
         "id" | "question_type" | "score" | "max_score" | "completed_at"

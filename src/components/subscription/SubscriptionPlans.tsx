@@ -1,42 +1,43 @@
 import * as React from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, CreditCard, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  LC_SUBSCRIPTION_PLANS,
-  type SubscriptionPlan,
-  type SubscriptionPlanId,
-} from "@/lib/subscriptionPlans";
+import { LC_SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
+import { billingApi } from "@/lib/billingApi";
+import { useLcStripeSubscription } from "@/hooks/useLcSubscription";
+import { useAuth } from "@/providers/AuthContext";
 
 type Props = {
-  activePlanId?: SubscriptionPlanId | string | null;
-  onSelectPlan?: (planId: SubscriptionPlanId) => void;
   compact?: boolean;
 };
 
-export function SubscriptionPlans({ activePlanId, onSelectPlan, compact }: Props) {
-  const [loading, setLoading] = React.useState<SubscriptionPlanId | null>(null);
+const LIVE_STRIPE_STATUSES = ["active", "trialing", "past_due"];
 
-  const handleSelect = async (plan: SubscriptionPlan) => {
-    setLoading(plan.id);
-    if (onSelectPlan) {
-      onSelectPlan(plan.id);
-      setLoading(null);
-      return;
+export function SubscriptionPlans({ compact }: Props) {
+  const { user } = useAuth();
+  const { data: stripeSub } = useLcStripeSubscription(user?.id);
+  const [loading, setLoading] = React.useState(false);
+  const isSubscribed = Boolean(stripeSub && LIVE_STRIPE_STATUSES.includes(stripeSub.status));
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      // Both redirect to Stripe; loading stays on until the page unloads.
+      if (isSubscribed) await billingApi.openPortal();
+      else await billingApi.startCheckout();
+    } catch (err) {
+      setLoading(false);
+      toast.error(isSubscribed ? "Couldn't open billing" : "Couldn't start checkout", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     }
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(null);
-    toast.info(`${plan.name} selected — Stripe checkout will be connected in the next release.`, {
-      description: "Contact support to activate your PrepSmart LC Pro plan manually.",
-      duration: 6000,
-    });
   };
 
   return (
-    <div className={cn("grid gap-5", compact ? "md:grid-cols-1" : "md:grid-cols-3")}>
+    <div className={cn("grid gap-5", compact ? "max-w-sm" : "max-w-md")}>
       {LC_SUBSCRIPTION_PLANS.map((plan, i) => {
-        const isActive = activePlanId === plan.id;
-        const isLoading = loading === plan.id;
+        const isActive = isSubscribed;
+        const isLoading = loading;
 
         return (
           <div
@@ -90,23 +91,25 @@ export function SubscriptionPlans({ activePlanId, onSelectPlan, compact }: Props
 
             <button
               type="button"
-              disabled={isActive || isLoading}
-              onClick={() => handleSelect(plan)}
+              disabled={isLoading}
+              onClick={handleClick}
               className={cn(
                 "relative w-full overflow-hidden rounded-full py-2.5 text-sm font-bold transition-all duration-300 active:scale-95",
                 plan.highlight
                   ? "bg-gradient-to-r from-cyan-500 to-emerald-500 text-white shadow-lg shadow-cyan-900/30 hover:scale-[1.02] hover:shadow-xl"
                   : "border border-white/20 bg-white/5 text-white hover:bg-white/10",
-                isActive && "cursor-default opacity-70",
               )}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Processing…
+                  Redirecting to Stripe…
                 </span>
               ) : isActive ? (
-                "Current plan"
+                <>
+                  <CreditCard className="mr-1 inline size-3.5" />
+                  Manage billing
+                </>
               ) : (
                 <>
                   {plan.highlight && (

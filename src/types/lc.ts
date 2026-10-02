@@ -30,6 +30,14 @@ export interface LcSubscription {
   created_at: string;
 }
 
+/** Row of public.lc_stripe_subscriptions, maintained by the lc-stripe-webhook function. */
+export interface LcStripeSubscription {
+  stripe_subscription_id: string;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
 export interface LcAttempt {
   id: string;
   user_id: string;
