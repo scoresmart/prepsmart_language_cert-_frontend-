@@ -278,7 +278,7 @@ export function WritingRunner({
   const imageUrl = getImageUrl(question.image_path);
   const limits = WRITING_WORD_LIMITS[part] ?? WRITING_WORD_LIMITS["1"];
   const { min: minWords, max: maxWords } = limits;
-  const canSubmit = wordCount >= minWords && wordCount <= maxWords;
+  const canSubmit = wordCount > 0;
 
   const shellProps = {
     activePart: part,
