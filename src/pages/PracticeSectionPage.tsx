@@ -40,6 +40,7 @@ import {
 } from "@/lib/listeningQuestionData";
 import { LISTENING_PART_TITLES } from "@/lib/listeningInstructions";
 import { saveLocalAnswer } from "@/lib/practiceAttemptStorage";
+import type { PracticeAttemptAnswer } from "@/lib/practiceAttemptAnswer";
 import { notifyMockTestScoreFromAttempt, notifyMockWritingAiScore } from "@/lib/mockTestRecorder";
 import { useSubmitLock } from "@/hooks/useSubmitLock";
 import { useMockDeferredPracticeSubmit, mockShowAnswers } from "@/hooks/useMockDeferredPracticeSubmit";
@@ -53,6 +54,7 @@ type AttemptBody = {
   question_set_id: string;
   score: number;
   total: number;
+  answer?: PracticeAttemptAnswer;
 };
 
 async function persistAttempt(body: AttemptBody, onAttemptSaved?: () => void): Promise<string | null> {
@@ -239,6 +241,7 @@ export function WritingRunner({
           question_set_id: question.id,
           score: 0,
           total: 12,
+          answer: { kind: "text", prompt: question.question_text, text },
         },
         onAttemptSaved,
       );
@@ -454,6 +457,15 @@ function Reading1ARunner({
           question_set_id: question.id,
           score,
           total: items.length,
+          answer: {
+            kind: "items",
+            items: items.map((item, i) => ({
+              label: `Question ${i + 1}`,
+              studentAnswer: answers[i] ?? "—",
+              correctAnswer: LABELS[item.correctAnswer],
+              isCorrect: answers[i] === LABELS[item.correctAnswer],
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -558,6 +570,15 @@ function Reading1BRunner({
           question_set_id: question.id,
           score,
           total: gapOptions.length,
+          answer: {
+            kind: "items",
+            items: gapOptions.map((gap, i) => ({
+              label: `Blank ${gapStartNum + i}`,
+              studentAnswer: answers[i] ?? "—",
+              correctAnswer: LABELS[gap.correctAnswer],
+              isCorrect: answers[i] === LABELS[gap.correctAnswer],
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -691,6 +712,15 @@ function Reading2Runner({
           question_set_id: question.id,
           score,
           total: gaps.length,
+          answer: {
+            kind: "items",
+            items: gaps.map((g) => ({
+              label: `Gap ${g}`,
+              studentAnswer: selections[g] ? `Sentence ${selections[g]}` : "—",
+              correctAnswer: `Sentence ${data?.correctMapping[g]}`,
+              isCorrect: selections[g] === data?.correctMapping[g],
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -848,6 +878,15 @@ function Reading3Runner({
           question_set_id: question.id,
           score,
           total: data?.statements.length ?? 0,
+          answer: {
+            kind: "items",
+            items: (data?.statements ?? []).map((stmt, i) => ({
+              label: `Statement ${i + 1}`,
+              studentAnswer: answers[i] ?? "—",
+              correctAnswer: stmt.correctAnswer,
+              isCorrect: answers[i] === stmt.correctAnswer,
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -964,6 +1003,15 @@ function Reading4Runner({
           question_set_id: question.id,
           score,
           total: data.questions.length,
+          answer: {
+            kind: "items",
+            items: data.questions.map((q, i) => ({
+              label: `Question ${i + 1}`,
+              studentAnswer: answers[i] ?? "—",
+              correctAnswer: q.correctAnswer,
+              isCorrect: answers[i] === q.correctAnswer,
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -1161,6 +1209,15 @@ function Listening1Runner({
           question_set_id: question.id,
           score,
           total: items.length,
+          answer: {
+            kind: "items",
+            items: items.map((item, i) => ({
+              label: `Question ${i + 1}`,
+              studentAnswer: answers[i] ?? "—",
+              correctAnswer: item.correctAnswer,
+              isCorrect: answers[i] === item.correctAnswer,
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -1279,6 +1336,15 @@ function Listening2Runner({
           question_set_id: question.id,
           score,
           total: allSubQuestions.length,
+          answer: {
+            kind: "items",
+            items: allSubQuestions.map(({ ci, qi, q }, idx) => ({
+              label: `Question ${idx + 1}`,
+              studentAnswer: answers[`${ci}-${qi}`] ?? "—",
+              correctAnswer: q.correctAnswer,
+              isCorrect: answers[`${ci}-${qi}`] === q.correctAnswer,
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -1411,6 +1477,15 @@ function Listening3Runner({
           question_set_id: question.id,
           score,
           total: answers.length,
+          answer: {
+            kind: "items",
+            items: answers.map((ans, i) => ({
+              label: `Blank ${i + 1}`,
+              studentAnswer: inputs[i] ?? "—",
+              correctAnswer: ans,
+              isCorrect: (inputs[i] ?? "").trim().toLowerCase() === ans.trim().toLowerCase(),
+            })),
+          },
         },
         onAttemptSaved,
       ),
@@ -1589,6 +1664,15 @@ function Listening4Runner({
           question_set_id: question.id,
           score,
           total: qs.length,
+          answer: {
+            kind: "items",
+            items: qs.map((q, i) => ({
+              label: `Question ${i + 1}`,
+              studentAnswer: answers[i] !== undefined ? LABELS[answers[i]!] : "—",
+              correctAnswer: LABELS[q.correctAnswer],
+              isCorrect: answers[i] === q.correctAnswer,
+            })),
+          },
         },
         onAttemptSaved,
       ),

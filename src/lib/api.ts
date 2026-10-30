@@ -6,6 +6,7 @@
 
 import { supabase } from "./supabase/client";
 import { getApiBaseUrl, isProductionMisconfigured } from "./apiConfig";
+import type { PracticeAttemptAnswer } from "./practiceAttemptAnswer";
 
 const BASE_URL = getApiBaseUrl();
 
@@ -840,7 +841,13 @@ export const api = {
 
   // ─── Practice Attempts ────────────────────────────────────────────────────
   practice: {
-    saveAttempt: (body: { question_type: string; question_set_id: string; score: number; total: number }) =>
+    saveAttempt: (body: {
+      question_type: string;
+      question_set_id: string;
+      score: number;
+      total: number;
+      answer?: PracticeAttemptAnswer;
+    }) =>
       request<ApiResponse<{ id: string }>>("/practice/attempts", { method: "POST", body: JSON.stringify(body) }),
     myAttempts: (question_type?: string) =>
       request<
@@ -872,6 +879,7 @@ export const api = {
             created_at: string;
             student_name: string | null;
             student_email: string | null;
+            answer: PracticeAttemptAnswer | null;
           }[]
         >
       >(`/practice/attempts/admin${qs({ limit })}`),
