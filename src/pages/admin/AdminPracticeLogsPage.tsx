@@ -62,6 +62,19 @@ function AnswerDetail({ answer }: { answer: PracticeAttemptAnswer | null }) {
       </div>
     );
   }
+  if (answer.kind === "speaking") {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Transcript</p>
+        {answer.turns.map((turn, i) => (
+          <div key={i} className="rounded-md border p-3 text-sm">
+            <p className="mb-1 text-xs font-semibold capitalize text-slate-500">{turn.role}</p>
+            <p className="whitespace-pre-wrap text-slate-800">{turn.text}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <table className="w-full text-sm">
       <thead>
